@@ -244,6 +244,15 @@ class PTITChatApp {
                 if (e.target === modal) modal.classList.remove("active");
             });
         });
+        const quickModelSelect = document.getElementById("quickModelSelect");
+        if (quickModelSelect) {
+            quickModelSelect.value = this.settings.model;
+            quickModelSelect.addEventListener("change", (e) => {
+                this.settings.model = e.target.value; 
+                localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings)); 
+                this.showToast(`Đã chuyển sang mô hình: ${this.settings.model}`, "success"); 
+            });
+        }
     }
 
     autoGrowTextarea() {
@@ -306,7 +315,9 @@ class PTITChatApp {
         this.settings.autoVoice = this.autoVoiceToggle.checked;
 
         localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
-        this.modelBadgeDisplay.textContent = this.settings.model;
+        if (this.modelBadgeDisplay) {
+            this.modelBadgeDisplay.textContent = this.settings.model;
+        }
         this.settingsModal.classList.remove("active");
         this.showToast("Đã lưu cấu hình RAG thành công!", "success");
     }

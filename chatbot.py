@@ -29,7 +29,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 # Cấu hình Google GenAI Client (dùng SDK mới nhất: google-genai)
-API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_KEY_HERE")
+API_KEY = os.environ.get("GEMINI_API_KEY", "[GCP_API_KEY]")
 
 
 def get_genai_client(api_key=None):
