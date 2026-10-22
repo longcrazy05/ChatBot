@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PTIT Smart Assistant - Trợ Lý Ảo Thông Minh Học Viện PTIT</title>
-    <meta name="description" content="Hệ thống Trợ lý ảo AI hỏi đáp thông tin học phí, quy chế đào tạo và chương trình học ngành Công nghệ Thông tin Học viện Công nghệ Bưu chính Viễn thông.">
+    <title>PTIT ChatBot - Trợ Lý Thông Tin Học Viện</title>
+    <meta name="description" content="Trợ lý ảo AI hỏi đáp thông tin học phí, quy chế đào tạo và chương trình học ngành Công nghệ Thông tin Học viện PTIT.">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23C41E3A'/><text x='50%' y='62%' font-size='50' font-weight='900' fill='white' text-anchor='middle' font-family='sans-serif'>P</text></svg>">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     
-    <!-- Font Awesome / Iconify / CDN libraries -->
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     
-    <!-- Markdown & Highlight.js for beautiful markdown & table rendering -->
+    <!-- Markdown & Highlight.js -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -32,7 +32,7 @@
                     <div class="brand-badge">PTIT</div>
                     <div class="brand-info">
                         <span class="brand-title">ChatBot</span>
-                        
+                        <span class="brand-subtitle">Học viện CNBCVT</span>
                     </div>
                 </div>
                 <button class="icon-btn mobile-close-btn" id="closeSidebarBtn" title="Đóng menu">
@@ -60,34 +60,19 @@
                 </div>
             </div>
 
-            <!-- KNOWLEDGE BASE STATS -->
-            <div class="sidebar-section kb-stats-section">
-                <div class="section-title">
-                    <span>Cơ sở tri thức (RAG)</span>
-                    <span class="badge-live" id="kbStatusBadge"><span class="pulse-dot"></span> Sẵn sàng</span>
-                </div>
-                <div class="kb-cards">
-                    <div class="kb-stat-card" id="openKbModalBtn" title="Xem chi tiết các tài liệu đã lập chỉ mục">
-                        <div class="kb-stat-icon"><i class="fa-solid fa-database"></i></div>
-                        <div class="kb-stat-text">
-                            <span class="kb-count" id="totalChunksDisplay">348 Chunks</span>
-                            <span class="kb-label">Vector ChromaDB</span>
-                        </div>
-                        <i class="fa-solid fa-chevron-right kb-arrow"></i>
-                    </div>
-                </div>
-            </div>
-
             <!-- SIDEBAR FOOTER -->
             <div class="sidebar-footer">
-                <button class="footer-btn" id="openSettingsBtn" title="Cài đặt hệ thống & API Key">
-                    <i class="fa-solid fa-gear"></i>
+                <button class="footer-btn" id="openKbModalBtn" title="Xem danh mục tài liệu">
+                    <i class="fa-solid fa-book-bookmark"></i>
+                    <span>Tài liệu (<span id="sidebarChunksCount">348</span> Chunks)</span>
+                </button>
+                <button class="footer-btn" id="openSettingsBtn" title="Cài đặt API Key & Mô hình">
+                    <i class="fa-solid fa-sliders"></i>
                     <span>Cài đặt</span>
                 </button>
-                <div class="footer-divider"></div>
-                <button class="footer-btn" id="themeToggleBtn" title="Chuyển chế độ Sáng / Tối">
+                <button class="footer-btn" id="themeToggleBtn" title="Đổi giao diện">
                     <i class="fa-solid fa-moon" id="themeIcon"></i>
-                    <span id="themeText">Giao diện Tối</span>
+                    <span id="themeText">Giao diện tối</span>
                 </button>
             </div>
         </aside>
@@ -98,29 +83,23 @@
             <header class="chat-navbar">
                 <div class="navbar-left">
                     <button class="icon-btn mobile-menu-btn" id="openSidebarBtn" title="Mở danh mục">
-                        <i class="fa-solid fa-bars-staggered"></i>
+                        <i class="fa-solid fa-bars"></i>
                     </button>
-                    <div class="current-chat-meta">
-                        <div class="chat-title-wrapper">
-                            <h1 class="chat-title" id="currentChatTitle">Trợ lý Hỏi đáp Học viện PTIT</h1>
-                            <span class="status-indicator-pill">
-                                <span class="pulse-dot green"></span>
-                                <!-- <span id="modelBadgeDisplay">Gemini RAG Engine</span> -->
-                            </span>
-                        </div>
-                        <!-- <div class="chat-submeta">Học phí • Chương trình Đào tạo CNTT • Sổ tay Sinh viên</div> -->
+                    <div class="chat-title-wrapper">
+                        <h1 class="chat-title" id="currentChatTitle">Trợ lý Hỏi đáp Học viện PTIT</h1>
+                        <span class="status-indicator-pill" title="Hệ thống sẵn sàng">
+                            <span class="pulse-dot green"></span>
+                            <span class="status-label">Trực tuyến</span>
+                        </span>
                     </div>
                 </div>
                 <div class="navbar-right">
-                    <button class="action-btn-pill" id="viewDocsNavbarBtn" title="Xem danh mục 4 tài liệu gốc">
-                        <i class="fa-solid fa-book-open"></i>
-                        <span class="desktop-only">Tài liệu PTIT</span>
+                    <button class="action-btn-pill" id="navbarDocsBtn" title="Xem 4 tài liệu đã số hóa">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <span>Tài liệu gốc</span>
                     </button>
-                    <button class="icon-btn" id="exportChatBtn" title="Xuất nội dung trò chuyện (Markdown)">
-                        <i class="fa-solid fa-arrow-up-from-bracket"></i>
-                    </button>
-                    <button class="icon-btn" id="clearCurrentChatBtn" title="Xóa đoạn chat hiện tại">
-                        <i class="fa-solid fa-rotate-right"></i>
+                    <button class="icon-btn" id="navbarNewChatBtn" title="Tạo chat mới">
+                        <i class="fa-solid fa-pen-to-square"></i>
                     </button>
                 </div>
             </header>
@@ -129,27 +108,13 @@
             <div class="chat-messages-area" id="chatMessagesArea">
                 <!-- HERO WELCOME (Shown when chat is empty) -->
                 <div class="welcome-hero" id="welcomeHero">
-                    <div class="hero-avatar">
-                        <div class="avatar-glow"></div>
-                        <div class="ptit-logo-circle">
-                            <span class="ptit-monogram">PTIT</span>
-                        </div>
-                    </div>
-                    <h2 class="hero-title">Xin chào! Tôi có thể giúp gì cho bạn?</h2>
+                    <div class="hero-badge">PTIT AI</div>
+                    <h2 class="hero-title">Xin chào! Bạn cần tìm hiểu gì hôm nay?</h2>
                     <p class="hero-desc">
-                        Hệ thống Trợ lý AI kết hợp tìm kiếm ngữ nghĩa <strong>ChromaDB Vector Store</strong> 
-                        và mô hình ngôn ngữ <strong>Gemini</strong>, được huấn luyện trên toàn bộ văn bản chính thức của Học viện PTIT.
+                        Trợ lý tra cứu nhanh thông tin chính thức từ cơ sở dữ liệu học viện: Học phí, Khung chương trình đào tạo CNTT và Quy chế sinh viên.
                     </p>
 
-                    <!-- QUICK FILTER PILLS -->
-                    <div class="prompt-category-tabs">
-                        <button class="cat-pill active" data-cat="all"><i class="fa-solid fa-sparkles"></i> Phổ biến</button>
-                        <button class="cat-pill" data-cat="tuition"><i class="fa-solid fa-coins"></i> Học phí</button>
-                        <button class="cat-pill" data-cat="curriculum"><i class="fa-solid fa-graduation-cap"></i> Ngành CNTT</button>
-                        <button class="cat-pill" data-cat="rules"><i class="fa-solid fa-book-bookmark"></i> Quy chế & Học bổng</button>
-                    </div>
-
-                    <!-- SUGGESTION CARDS -->
+                    <!-- COMPACT SUGGESTIONS GRID -->
                     <div class="suggestions-grid" id="suggestionsGrid">
                         <!-- Populated by JS -->
                     </div>
@@ -171,7 +136,7 @@
                             <span></span>
                             <span></span>
                         </div>
-                        <span class="typing-label" id="typingLabel">Đang tra cứu Vector DB & tạo câu trả lời...</span>
+                        <span class="typing-label" id="typingLabel">Đang tra cứu dữ liệu & tạo câu trả lời...</span>
                     </div>
                 </div>
             </div>
@@ -179,39 +144,18 @@
             <!-- CHAT INPUT AREA -->
             <footer class="chat-input-area">
                 <div class="input-card">
-                    <!-- Quick action bar above textarea -->
-                    <div class="input-top-bar">
-                        <div class="quick-chip-container" id="quickChipContainer">
-                            <button class="quick-chip" data-prompt="Học phí ngành Công nghệ thông tin năm 2025 là bao nhiêu?">💰 Học phí CNTT 2025</button>
-                            <button class="quick-chip" data-prompt="Khối lượng kiến thức tốt nghiệp ngành CNTT gồm bao nhiêu tín chỉ?">🎓 Tín chỉ tốt nghiệp CNTT</button>
-                            <button class="quick-chip" data-prompt="Điều kiện để được xét học bổng khuyến khích học tập tại PTIT?">🏆 Học bổng khuyến khích</button>
-                            <button class="quick-chip" data-prompt="Mức thu học phí năm 2026 có thay đổi gì so với 2025 không?">📊 So sánh học phí 2025 - 2026</button>
-                        </div>
-                    </div>
-
-                    <!-- Input form -->
                     <form class="input-form" id="chatForm">
                         <textarea 
                             id="userInput" 
                             rows="1" 
-                            placeholder="Nhập câu hỏi về học phí, môn học CNTT, quy chế PTIT... (Shift + Enter để xuống dòng)"
+                            placeholder="Nhập câu hỏi về học phí, môn học CNTT, quy chế PTIT..."
                             autocomplete="off"
                             required
                         ></textarea>
-
-                        <div class="input-controls">
-                            <button type="button" class="tool-btn" id="voiceInputBtn" title="Nhập câu hỏi bằng giọng nói (Speech-to-Text)">
-                                <i class="fa-solid fa-microphone"></i>
-                            </button>
-                            <button type="submit" class="send-btn" id="sendBtn" title="Gửi câu hỏi (Enter)">
-                                <i class="fa-solid fa-paper-plane"></i>
-                            </button>
-                        </div>
+                        <button type="submit" class="send-btn" id="sendBtn" title="Gửi câu hỏi (Enter)">
+                            <i class="fa-solid fa-arrow-up"></i>
+                        </button>
                     </form>
-
-                    <div class="input-footer-note">
-                        <span>Tra cứu dựa trên <strong>4 tài liệu số hóa</strong> chính thức từ PTIT • Dữ liệu trả về có đối chiếu số trang</span>
-                    </div>
                 </div>
             </footer>
         </main>
@@ -222,10 +166,10 @@
         <div class="modal-content modal-lg">
             <div class="modal-header">
                 <div class="modal-title-group">
-                    <div class="modal-icon"><i class="fa-solid fa-book-atlas"></i></div>
+                    <div class="modal-icon"><i class="fa-solid fa-book-bookmark"></i></div>
                     <div>
-                        <h3 class="modal-title">Cơ Sở Dữ Liệu Số Hóa PTIT</h3>
-                        <p class="modal-subtitle">Kho văn bản đã được băm nhỏ và tạo vector lưu trữ trong ChromaDB</p>
+                        <h3 class="modal-title">Cơ Sở Dữ Liệu Tài Liệu PTIT</h3>
+                        <p class="modal-subtitle">4 tài liệu đã số hóa và chia nhỏ thành vector tra cứu</p>
                     </div>
                 </div>
                 <button class="icon-btn" id="closeKbModalBtn"><i class="fa-solid fa-xmark"></i></button>
@@ -234,7 +178,7 @@
                 <div class="kb-summary-row">
                     <div class="stat-pill"><i class="fa-solid fa-cubes"></i> Tổng số chunks: <strong id="modalTotalChunks">348</strong></div>
                     <div class="stat-pill"><i class="fa-solid fa-file-pdf"></i> Tài liệu: <strong>4 files PDF</strong></div>
-                    <div class="stat-pill"><i class="fa-solid fa-circle-check" style="color: var(--accent-green)"></i> Trạng thái: <strong>100% Vectorized</strong></div>
+                    <div class="stat-pill"><i class="fa-solid fa-circle-check" style="color: var(--accent-green)"></i> Trạng thái: <strong>Sẵn sàng</strong></div>
                 </div>
                 <div class="catalog-grid" id="catalogGrid">
                     <!-- Populated dynamically -->
@@ -253,8 +197,8 @@
                 <div class="modal-title-group">
                     <div class="modal-icon"><i class="fa-solid fa-sliders"></i></div>
                     <div>
-                        <h3 class="modal-title">Cài Đặt RAG & Trí Tuệ Nhân Tạo</h3>
-                        <p class="modal-subtitle">Tùy biến mô hình Gemini và thông số tìm kiếm ngữ nghĩa</p>
+                        <h3 class="modal-title">Cài Đặt Hệ Thống</h3>
+                        <p class="modal-subtitle">Tùy biến API Key và mô hình xử lý Gemini</p>
                     </div>
                 </div>
                 <button class="icon-btn" id="closeSettingsModalBtn"><i class="fa-solid fa-xmark"></i></button>
@@ -263,47 +207,25 @@
                 <div class="form-group">
                     <label class="form-label" for="customApiKeyInput">
                         <span>Gemini API Key Cá Nhân (Tùy chọn)</span>
-                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="field-link">Lấy API Key miễn phí <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="field-link">Lấy Key miễn phí <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
                     </label>
-                    <input type="password" id="customApiKeyInput" class="form-control" placeholder="Dán API Key (bỏ trống để dùng mặc định hệ thống)...">
-                    <small class="form-hint">Nếu API mặc định bị quá tải vào giờ cao điểm, nhập API Key của bạn để trò chuyện mượt mà không giới hạn.</small>
+                    <input type="password" id="customApiKeyInput" class="form-control" placeholder="Dán Gemini API Key của bạn tại đây...">
+                    <small class="form-hint">Nếu để trống, hệ thống sẽ sử dụng API Key mặc định của server.</small>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="modelSelect">Mô hình AI Ưu tiên (LLM)</label>
+                    <label class="form-label" for="modelSelect">Mô hình AI (LLM)</label>
                     <select id="modelSelect" class="form-control">
-                        <option value="gemini-3.5-flash-lite" selected>gemini-3.5-flash-lite (Khuyên dùng - Siêu tốc & Ổn định)</option>
-                        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (Bản Lite mới nhất - Rất nhanh)</option>
-                        <option value="gemini-3-flash-preview">gemini-3-flash-preview (Thông minh thế hệ 3.0)</option>
-                        <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview (Bản xem trước)</option>
+                        <option value="gemini-3.5-flash-lite" selected>gemini-3.5-flash-lite (Rất nhanh & ổn định)</option>
+                        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (Bản Lite mới nhất)</option>
                         <option value="gemini-3.5-flash">gemini-3.5-flash (Cân bằng chất lượng)</option>
                         <option value="gemini-3.8-flash">gemini-3.8-flash (Chất lượng cao nhất)</option>
                         <option value="gemini-pro-latest">gemini-pro-latest (Chuyên sâu lý luận)</option>
                     </select>
                 </div>
-
-                <div class="form-group">
-                    <div class="range-header">
-                        <label class="form-label" for="topKInput">Số lượng đoạn tài liệu đối chiếu (Top-K Chunks):</label>
-                        <span class="range-val" id="topKValue">4</span>
-                    </div>
-                    <input type="range" id="topKInput" min="2" max="8" value="4" class="form-range">
-                    <div class="range-labels">
-                        <span>2 (Nhanh gọn)</span>
-                        <span>4 (Tối ưu)</span>
-                        <span>8 (Đầy đủ nhất)</span>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="autoVoiceToggle">
-                        <span>Tự động đọc to câu trả lời của trợ lý bằng giọng nói</span>
-                    </label>
-                </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="resetSettingsBtn">Đặt lại mặc định</button>
+                <button class="btn btn-secondary" id="resetSettingsBtn">Mặc định</button>
                 <button class="btn btn-primary" id="saveSettingsBtn">Lưu Cài Đặt</button>
             </div>
         </div>
@@ -316,8 +238,8 @@
                 <div class="modal-title-group">
                     <div class="modal-icon"><i class="fa-solid fa-file-lines"></i></div>
                     <div>
-                        <h3 class="modal-title" id="sourceModalTitle">Chi Tiết Đoạn Trích Dẫn Gốc</h3>
-                        <p class="modal-subtitle" id="sourceModalSubtitle">Đối chiếu nội dung trong cơ sở tri thức PTIT</p>
+                        <h3 class="modal-title" id="sourceModalTitle">Đoạn Trích Dẫn Gốc</h3>
+                        <p class="modal-subtitle" id="sourceModalSubtitle">Đối chiếu nội dung trực tiếp từ tài liệu</p>
                     </div>
                 </div>
                 <button class="icon-btn" id="closeSourceModalBtn"><i class="fa-solid fa-xmark"></i></button>
@@ -328,7 +250,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="copySourceContentBtn"><i class="fa-regular fa-copy"></i> Sao chép trích dẫn</button>
+                <button class="btn btn-secondary" id="copySourceContentBtn"><i class="fa-regular fa-copy"></i> Sao chép</button>
                 <button class="btn btn-primary" id="closeSourceModalFooterBtn">Đóng</button>
             </div>
         </div>

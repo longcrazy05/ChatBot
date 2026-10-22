@@ -28,8 +28,23 @@ import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
+# Nạp biến môi trường từ file .env
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # Tự động nạp .env nếu chưa cài python-dotenv
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
 # Cấu hình Google GenAI Client (dùng SDK mới nhất: google-genai)
-API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_KEY_HERE")
+API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 
 def get_genai_client(api_key=None):
