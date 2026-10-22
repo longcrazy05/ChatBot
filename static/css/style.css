@@ -4,6 +4,7 @@
    ============================================================================== */
 
 :root {
+    color-scheme: dark;
     /* Brand Colors - PTIT Crimson Identity */
     --primary: #c41e3a;
     --primary-hover: #b01a33;
@@ -67,6 +68,7 @@
 
 /* Light Mode Overrides */
 [data-theme="light"] {
+    color-scheme: light;
     --bg-app: #f4f6fa;
     --bg-sidebar: #ffffff;
     --bg-card: #ffffff;
@@ -1210,14 +1212,18 @@ html, body {
 
 .input-form {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 10px;
     background: var(--bg-input);
     border: 1.5px solid var(--border-subtle);
     border-radius: var(--radius-lg);
-    padding: 8px 12px;
+    padding: 7px 12px;
     box-shadow: var(--shadow-sm);
     transition: all var(--transition-fast);
+}
+
+.input-form.multiline {
+    align-items: flex-end;
 }
 
 .input-form:focus-within {
@@ -1236,8 +1242,12 @@ html, body {
     font-size: 0.96rem;
     line-height: 1.5;
     resize: none;
+    height: 38px;
     max-height: 160px;
-    padding: 6px 4px;
+    padding: 7px 6px;
+    margin: 0;
+    box-sizing: border-box;
+    display: block;
 }
 
 #userInput::placeholder {
@@ -1248,12 +1258,264 @@ html, body {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 2px;
+    margin: 0;
+}
+
+.input-divider {
+    width: 2px;
+    height: 18px;
+    background-color: var(--border-hover);
+    border-radius: 2px;
+    margin-right: 4px;
+    flex-shrink: 0;
+}
+
+[data-theme="light"] .input-divider {
+    background-color: var(--border-subtle);
+}
+
+.input-actions-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* ==============================================================================
+   QUICK MODEL SELECTOR & POP-UP CARD
+   ============================================================================== */
+.model-selector-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.model-selector-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: transparent;
+    border: none;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all var(--transition-fast);
+    max-width: 210px;
+    white-space: nowrap;
+}
+
+.model-selector-btn:hover {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.model-btn-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    transition: color var(--transition-fast);
+}
+
+.model-selector-btn:hover .model-btn-label {
+    color: var(--text-primary);
+}
+
+.model-btn-arrow {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.model-selector-wrapper.active .model-btn-arrow {
+    transform: rotate(180deg);
+    color: var(--primary);
+}
+
+.model-selector-wrapper.active .model-selector-btn {
+    color: var(--text-primary);
+    background: rgba(196, 30, 58, 0.12);
+}
+
+/* Thẻ Pop-up Chọn Mô hình AI */
+.model-popup-card {
+    position: absolute;
+    bottom: calc(100% + 14px);
+    right: 0;
+    width: 320px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-md);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding: 8px;
+    display: none;
+    flex-direction: column;
+    z-index: 1050;
+    transform-origin: bottom right;
+    animation: popupCardIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popupCardIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.model-popup-card.show {
+    display: flex;
+}
+
+.model-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 6px;
+}
+
+.model-popup-header-title {
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.model-popup-header-title i {
+    color: var(--primary);
+    font-size: 0.8rem;
+}
+
+.model-popup-header-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: var(--radius-full);
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.model-popup-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+.model-popup-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: all var(--transition-fast);
+    user-select: none;
+    text-align: left;
+    width: 100%;
+}
+
+.model-popup-item:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-subtle);
+}
+
+.model-popup-item.selected {
+    background: var(--primary-light);
+    border-color: rgba(196, 30, 58, 0.35);
+}
+
+.model-popup-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+}
+
+.model-popup-item-name {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.25;
+    -webkit-font-smoothing: antialiased;
+}
+
+.model-popup-item.selected .model-popup-item-name {
+    color: #ffffff;
+    font-weight: 700;
+}
+
+[data-theme="light"] .model-popup-item.selected .model-popup-item-name {
+    color: var(--primary);
+}
+
+.model-badge-tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.badge-recommended { color: #34d399; }
+.badge-fast { color: #38bdf8; }
+.badge-preview { color: #a78bfa; }
+.badge-balanced { color: #fbbf24; }
+.badge-quality { color: #f472b6; }
+.badge-pro { color: #fb7185; }
+
+[data-theme="light"] .badge-recommended { color: #059669; }
+[data-theme="light"] .badge-fast { color: #0284c7; }
+[data-theme="light"] .badge-preview { color: #7c3aed; }
+[data-theme="light"] .badge-balanced { color: #d97706; }
+[data-theme="light"] .badge-quality { color: #db2777; }
+[data-theme="light"] .badge-pro { color: #e11d48; }
+
+.model-popup-item-check {
+    color: var(--primary);
+    font-size: 0.85rem;
+    margin-left: 8px;
+    opacity: 0;
+    transform: scale(0.6);
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.model-popup-item.selected .model-popup-item-check {
+    opacity: 1;
+    transform: scale(1);
+}
+
+@media (max-width: 480px) {
+    .model-popup-card {
+        width: min(310px, calc(100vw - 24px));
+        left: 0;
+        right: auto;
+    }
 }
 
 .tool-btn {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: var(--radius-md);
     background: transparent;
     border: none;
@@ -1454,6 +1716,45 @@ html, body {
 .form-control:focus {
     border-color: var(--primary);
     box-shadow: 0 0 0 2px var(--primary-glow);
+}
+
+/* GLOBAL SELECT & OPTION STYLING (DARK / LIGHT THEMES) */
+select,
+.form-control select {
+    color-scheme: dark;
+}
+
+[data-theme="light"] select,
+[data-theme="light"] .form-control select {
+    color-scheme: light;
+}
+
+select option,
+.form-control option {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    padding: 10px 14px;
+}
+
+[data-theme="light"] select option,
+[data-theme="light"] .form-control option {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+}
+
+select option:checked,
+.form-control option:checked {
+    background-color: var(--primary) !important;
+    color: #ffffff !important;
+    font-weight: 600;
+}
+
+select option:hover,
+.form-control option:hover {
+    background-color: var(--bg-card-hover) !important;
+    color: var(--text-primary) !important;
 }
 
 .form-hint {
@@ -1703,7 +2004,75 @@ html, body {
         padding: 14px;
     }
     .chat-input-area {
-        padding: 10px 14px 16px;
+        padding: 8px 12px 14px;
+    }
+    .input-card {
+        gap: 6px;
+    }
+    /* Tối ưu ô nhập trên điện thoại: tách 2 tầng, textarea chiếm 100% độ rộng màn hình */
+    .input-form {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+        padding: 10px 12px 8px;
+        border-radius: var(--radius-md);
+    }
+    #userInput {
+        width: 100%;
+        min-height: 44px;
+        font-size: 1rem; /* 16px để chống tự động zoom trên iOS Safari */
+        padding: 4px 2px;
+        line-height: 1.45;
+    }
+    .input-controls {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 4px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border-subtle);
+    }
+    .input-divider {
+        display: none;
+    }
+    .model-selector-wrapper {
+        flex: 1;
+        min-width: 0;
+    }
+    .model-selector-btn {
+        max-width: 100%;
+        padding: 4px 6px;
+        font-size: 0.8rem;
+    }
+    .model-btn-label {
+        max-width: 170px;
+    }
+    .model-popup-card {
+        bottom: calc(100% + 10px);
+        left: 0;
+        right: auto;
+        width: min(320px, calc(100vw - 28px));
+        transform-origin: bottom left;
+    }
+    .input-actions-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+    .tool-btn {
+        width: 36px;
+        height: 36px;
+    }
+    .send-btn {
+        width: 38px;
+        height: 38px;
+    }
+    .input-footer-note {
+        font-size: 0.68rem;
+        padding: 0 4px;
+        line-height: 1.35;
     }
     .hero-title {
         font-size: 1.5rem;
