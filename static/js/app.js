@@ -56,7 +56,7 @@ class PTITChatApp {
         this.sessions = [];
         this.settings = {
             apiKey: "",
-            model: "gemini-3.5-flash-lite",
+            model: "gemini-3.5-flash",
             topK: 4,
             autoVoice: false
         };
@@ -250,12 +250,12 @@ class PTITChatApp {
 
     getModelDisplayLabel(modelId) {
         const labels = {
-            "gemini-3.5-flash-lite": "3.5 Flash-Lite (Khuyên dùng)",
+            "gemini-3.5-flash": "3.5 Flash (Khuyên dùng)",
+            "gemini-3.8-flash": "3.8 Flash (Chất lượng cao)",
+            "gemini-3.5-flash-lite": "3.5 Flash-Lite",
             "gemini-flash-lite-latest": "Flash Lite Latest (Nhanh)",
             "gemini-3-flash-preview": "3 Flash Preview",
             "gemini-3.1-flash-lite-preview": "3.1 Flash Lite Preview",
-            "gemini-3.5-flash": "3.5 Flash (Cân bằng)",
-            "gemini-3.8-flash": "3.8 Flash (Chất lượng cao)",
             "gemini-pro-latest": "Pro (Lý luận)"
         };
         return labels[modelId] || modelId;
@@ -269,7 +269,7 @@ class PTITChatApp {
         const quickSelect = document.getElementById("quickModelSelect");
 
         this.updateQuickModelUI = (modelValue) => {
-            const currentModel = modelValue || this.settings.model || "gemini-3.5-flash-lite";
+            const currentModel = modelValue || this.settings.model || "gemini-3.5-flash";
             if (label) {
                 label.textContent = this.getModelDisplayLabel(currentModel);
             }
@@ -437,19 +437,19 @@ class PTITChatApp {
     resetSettings() {
         this.settings = {
             apiKey: "",
-            model: "gemini-3.5-flash-lite",
+            model: "gemini-3.5-flash",
             topK: 4,
             autoVoice: false
         };
         this.customApiKeyInput.value = "";
-        this.modelSelect.value = "gemini-3.5-flash-lite";
+        this.modelSelect.value = "gemini-3.5-flash";
         this.topKInput.value = 4;
         this.topKValue.textContent = "4";
         this.autoVoiceToggle.checked = false;
         localStorage.removeItem("ptit_chat_settings");
-        this.modelBadgeDisplay.textContent = "gemini-3.5-flash-lite";
+        this.modelBadgeDisplay.textContent = "gemini-3.5-flash";
         if (this.updateQuickModelUI) {
-            this.updateQuickModelUI("gemini-3.5-flash-lite");
+            this.updateQuickModelUI("gemini-3.5-flash");
         }
         this.showToast("Đã khôi phục cài đặt mặc định.", "info");
     }

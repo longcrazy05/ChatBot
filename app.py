@@ -18,6 +18,12 @@ try:
 except Exception:
     pass
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from chatbot import (
     get_vector_db,
@@ -30,13 +36,13 @@ app.config['JSON_AS_ASCII'] = False
 
 # Danh sách model Gemini ưu tiên để thử theo thứ tự (các model nhanh, ổn định đưa lên đầu)
 FALLBACK_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3.8-flash",
     "gemini-3.5-flash-lite",
     "gemini-flash-lite-latest",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite-preview",
-    "gemini-3.5-flash",
-    "gemini-flash-latest",
-    "gemini-pro-latest"
+    "gemini-flash-latest"
 ]
 
 DOCUMENT_CATALOG = [
@@ -170,9 +176,9 @@ CÁC NGUYÊN TẮC BẮT BUỘC KHI TRẢ LỜI:
 
     last_error = ""
     start_time = time.time()
-    # Thử các model trong ngân sách thời gian tối đa 10s để không bao giờ bị timeout
+    # Thử các model trong ngân sách thời gian tối đa 15s để không bao giờ bị timeout
     for model_name in models_to_try:
-        if time.time() - start_time > 10:
+        if time.time() - start_time > 15:
             print(f"[!] Đã vượt ngân sách thời gian gọi LLM ({round(time.time() - start_time, 1)}s), chuyển ngay sang Engine dự phòng.")
             break
 
@@ -180,7 +186,7 @@ CÁC NGUYÊN TẮC BẮT BUỘC KHI TRẢ LỜI:
             prompt=system_instruction,
             model_name=model_name,
             api_key=active_key,
-            timeout=5
+            timeout=6
         )
         if ans:
             return ans, model_name, None
@@ -830,9 +836,11 @@ def chat_api():
 
 
 if __name__ == "__main__":
+    host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", 5000))
+    debug = os.environ.get("FLASK_DEBUG", "False").lower() in ("true", "1", "t")
     print(f"\n{'='*60}")
     print(f"🎓 CHATBOT TRỢ LÝ HỌC VIỆN PTIT ĐANG CHẠY TẠI:")
     print(f"👉 http://127.0.0.1:{port}")
     print(f"{'='*60}\n")
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    app.run(host=host, port=port, debug=debug, threaded=True)

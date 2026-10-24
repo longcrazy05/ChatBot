@@ -28,6 +28,12 @@ import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Cấu hình Google GenAI Client (dùng SDK mới nhất: google-genai)
 API_KEY = os.environ.get("GEMINI_API_KEY", "[ENCRYPTION_KEY]")
 
@@ -42,12 +48,12 @@ client = get_genai_client()
 
 # Danh sách model Vision & Chat ưu tiên (tự động luân chuyển khi gặp giới hạn quota hoặc model bận)
 VISION_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3.8-flash",
     "gemini-3.5-flash-lite",
     "gemini-flash-lite-latest",
     "gemini-3-flash-preview",
     "gemini-3.1-flash-lite-preview",
-    "gemini-3.5-flash",
-    "gemini-3.8-flash",
     "gemini-3.7-flash",
     "gemini-3.6-flash"
 ]
@@ -616,12 +622,14 @@ if __name__ == "__main__":
     # Kiểm tra nếu người dùng muốn khởi chạy giao diện Web
     if "--web" in sys.argv or "--ui" in sys.argv or "-w" in sys.argv:
         from app import app
+        host = os.environ.get("HOST", "0.0.0.0")
         port = int(os.environ.get("PORT", 5000))
+        debug = os.environ.get("FLASK_DEBUG", "False").lower() in ("true", "1", "t")
         print(f"\n{'='*60}")
         print(f"🎓 ĐANG KHỞI CHẠY GIAO DIỆN WEB PTIT ASSISTANT...")
         print(f"👉 Mở trình duyệt tại: http://127.0.0.1:{port}")
         print(f"{'='*60}\n")
-        app.run(host="0.0.0.0", port=port, debug=False)
+        app.run(host=host, port=port, debug=debug)
         sys.exit(0)
 
     process_data_folder(

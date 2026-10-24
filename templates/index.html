@@ -1,28 +1,35 @@
 <!DOCTYPE html>
 <html lang="vi" data-theme="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PTIT Smart Assistant - Trợ Lý Ảo Thông Minh PTIT</title>
-    <meta name="description" content="Hệ thống Trợ lý ảo AI hỏi đáp thông tin học phí, quy chế đào tạo và chương trình học ngành Công nghệ Thông tin Học viện Công nghệ Bưu chính Viễn thông.">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23C41E3A'/><text x='50%' y='62%' font-size='50' font-weight='900' fill='white' text-anchor='middle' font-family='sans-serif'>P</text></svg>">
-    
+    <meta name="description"
+        content="Hệ thống Trợ lý ảo AI hỏi đáp thông tin học phí, quy chế đào tạo và chương trình học ngành Công nghệ Thông tin Học viện Công nghệ Bưu chính Viễn thông.">
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23C41E3A'/><text x='50%' y='62%' font-size='50' font-weight='900' fill='white' text-anchor='middle' font-family='sans-serif'>P</text></svg>">
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+
     <!-- Font Awesome / Iconify / CDN libraries -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    
+
     <!-- Markdown & Highlight.js for beautiful markdown & table rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
+
 <body>
     <div class="app-layout">
         <!-- SIDEBAR -->
@@ -32,7 +39,7 @@
                     <div class="brand-badge">PTIT</div>
                     <div class="brand-info">
                         <span class="brand-title">ChatBot</span>
-                        
+
                     </div>
                 </div>
                 <button class="icon-btn mobile-close-btn" id="closeSidebarBtn" title="Đóng menu">
@@ -87,7 +94,7 @@
                 <div class="footer-divider"></div>
                 <button class="footer-btn" id="themeToggleBtn" title="Chuyển chế độ Sáng / Tối">
                     <i class="fa-solid fa-moon" id="themeIcon"></i>
-                    <span id="themeText">Giao diện Tối</span>
+                    <span id="themeText">Giao diện tối</span>
                 </button>
             </div>
         </aside>
@@ -137,16 +144,20 @@
                     </div>
                     <h2 class="hero-title">Xin chào! Tôi có thể giúp gì cho bạn?</h2>
                     <p class="hero-desc">
-                        Hệ thống Trợ lý AI kết hợp tìm kiếm ngữ nghĩa <strong>ChromaDB Vector Store</strong> 
-                        và mô hình ngôn ngữ <strong>Gemini</strong>, được huấn luyện trên toàn bộ văn bản chính thức của Học viện PTIT.
+                        Hệ thống Trợ lý AI kết hợp tìm kiếm ngữ nghĩa <strong>ChromaDB Vector Store</strong>
+                        và mô hình ngôn ngữ <strong>Gemini</strong>, được huấn luyện trên toàn bộ văn bản chính thức của
+                        Học viện PTIT.
                     </p>
 
                     <!-- QUICK FILTER PILLS -->
                     <div class="prompt-category-tabs">
-                        <button class="cat-pill active" data-cat="all"><i class="fa-solid fa-sparkles"></i> Phổ biến</button>
+                        <button class="cat-pill active" data-cat="all"><i class="fa-solid fa-sparkles"></i> Phổ
+                            biến</button>
                         <button class="cat-pill" data-cat="tuition"><i class="fa-solid fa-coins"></i> Học phí</button>
-                        <button class="cat-pill" data-cat="curriculum"><i class="fa-solid fa-graduation-cap"></i> Ngành CNTT</button>
-                        <button class="cat-pill" data-cat="rules"><i class="fa-solid fa-book-bookmark"></i> Quy chế & Học bổng</button>
+                        <button class="cat-pill" data-cat="curriculum"><i class="fa-solid fa-graduation-cap"></i> Ngành
+                            CNTT</button>
+                        <button class="cat-pill" data-cat="rules"><i class="fa-solid fa-book-bookmark"></i> Quy chế &
+                            Học bổng</button>
                     </div>
 
                     <!-- SUGGESTION CARDS -->
@@ -182,22 +193,26 @@
                     <!-- Quick action bar above textarea -->
                     <div class="input-top-bar">
                         <div class="quick-chip-container" id="quickChipContainer">
-                            <button class="quick-chip" data-prompt="Học phí ngành Công nghệ thông tin năm 2025 là bao nhiêu?">💰 Học phí CNTT 2025</button>
-                            <button class="quick-chip" data-prompt="Khối lượng kiến thức tốt nghiệp ngành CNTT gồm bao nhiêu tín chỉ?">🎓 Tín chỉ tốt nghiệp CNTT</button>
-                            <button class="quick-chip" data-prompt="Điều kiện để được xét học bổng khuyến khích học tập tại PTIT?">🏆 Học bổng khuyến khích</button>
-                            <button class="quick-chip" data-prompt="Mức thu học phí năm 2026 có thay đổi gì so với 2025 không?">📊 So sánh học phí 2025 - 2026</button>
+                            <button class="quick-chip"
+                                data-prompt="Học phí ngành Công nghệ thông tin năm 2025 là bao nhiêu?">💰 Học phí CNTT
+                                2025</button>
+                            <button class="quick-chip"
+                                data-prompt="Khối lượng kiến thức tốt nghiệp ngành CNTT gồm bao nhiêu tín chỉ?">🎓 Tín
+                                chỉ tốt nghiệp CNTT</button>
+                            <button class="quick-chip"
+                                data-prompt="Điều kiện để được xét học bổng khuyến khích học tập tại PTIT?">🏆 Học bổng
+                                khuyến khích</button>
+                            <button class="quick-chip"
+                                data-prompt="Mức thu học phí năm 2026 có thay đổi gì so với 2025 không?">📊 So sánh học
+                                phí 2025 - 2026</button>
                         </div>
                     </div>
 
                     <!-- Input form -->
                     <form class="input-form" id="chatForm">
-                        <textarea 
-                            id="userInput" 
-                            rows="1" 
-                            placeholder="Nhập câu hỏi về học phí, môn học, quy chế PTIT..."
-                            autocomplete="off"
-                            required
-                        ></textarea>
+                        <textarea id="userInput" rows="1"
+                            placeholder="Nhập câu hỏi về học phí, môn học, quy chế PTIT..." autocomplete="off"
+                            required></textarea>
 
                         <div class="input-controls">
                             <!-- Vạch ngăn cách (Divider - desktop) -->
@@ -205,8 +220,9 @@
 
                             <!-- THANH CHỌN MÔ HÌNH THU GỌN -->
                             <div class="model-selector-wrapper" id="modelSelectorWrapper">
-                                <button type="button" class="model-selector-btn" id="modelSelectorBtn" title="Chọn mô hình AI (LLM)" aria-haspopup="true" aria-expanded="false">
-                                    <span class="model-btn-label" id="modelBtnLabel">3.5 Flash (Cân bằng)</span>
+                                <button type="button" class="model-selector-btn" id="modelSelectorBtn"
+                                    title="Chọn mô hình AI (LLM)" aria-haspopup="true" aria-expanded="false">
+                                    <span class="model-btn-label" id="modelBtnLabel">3.5 Flash (Khuyên dùng)</span>
                                     <i class="fa-solid fa-chevron-down model-btn-arrow"></i>
                                 </button>
 
@@ -219,38 +235,11 @@
                                         <span class="model-popup-header-badge">PTIT RAG</span>
                                     </div>
                                     <div class="model-popup-list">
-                                        <div class="model-popup-item" data-model="gemini-3.5-flash-lite" role="menuitem">
-                                            <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">3.5 Flash-Lite</span>
-                                                <span class="model-badge-tag badge-recommended">Khuyên dùng • Siêu tốc & Ổn định</span>
-                                            </div>
-                                            <i class="fa-solid fa-check model-popup-item-check"></i>
-                                        </div>
-                                        <div class="model-popup-item" data-model="gemini-flash-lite-latest" role="menuitem">
-                                            <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">Flash Lite Latest</span>
-                                                <span class="model-badge-tag badge-fast">Nhanh • Bản Lite mới nhất</span>
-                                            </div>
-                                            <i class="fa-solid fa-check model-popup-item-check"></i>
-                                        </div>
-                                        <div class="model-popup-item" data-model="gemini-3-flash-preview" role="menuitem">
-                                            <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">3 Flash Preview</span>
-                                                <span class="model-badge-tag badge-preview">Thông minh thế hệ 3.0</span>
-                                            </div>
-                                            <i class="fa-solid fa-check model-popup-item-check"></i>
-                                        </div>
-                                        <div class="model-popup-item" data-model="gemini-3.1-flash-lite-preview" role="menuitem">
-                                            <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">3.1 Flash Lite Preview</span>
-                                                <span class="model-badge-tag badge-preview">Bản xem trước nâng cao</span>
-                                            </div>
-                                            <i class="fa-solid fa-check model-popup-item-check"></i>
-                                        </div>
                                         <div class="model-popup-item" data-model="gemini-3.5-flash" role="menuitem">
                                             <div class="model-popup-item-info">
                                                 <span class="model-popup-item-name">3.5 Flash</span>
-                                                <span class="model-badge-tag badge-balanced">Cân bằng chất lượng & tốc độ</span>
+                                                <span class="model-badge-tag badge-recommended">Khuyên dùng • Siêu tốc &
+                                                    Ổn định</span>
                                             </div>
                                             <i class="fa-solid fa-check model-popup-item-check"></i>
                                         </div>
@@ -261,10 +250,45 @@
                                             </div>
                                             <i class="fa-solid fa-check model-popup-item-check"></i>
                                         </div>
+                                        <div class="model-popup-item" data-model="gemini-3.5-flash-lite"
+                                            role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">3.5 Flash-Lite</span>
+                                                <span class="model-badge-tag badge-fast">Bản Lite tiết kiệm</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-flash-lite-latest"
+                                            role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">Flash Lite Latest</span>
+                                                <span class="model-badge-tag badge-fast">Nhanh • Bản Lite mới
+                                                    nhất</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-3-flash-preview"
+                                            role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">3 Flash Preview</span>
+                                                <span class="model-badge-tag badge-preview">Thông minh thế hệ 3.0</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-3.1-flash-lite-preview"
+                                            role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">3.1 Flash Lite Preview</span>
+                                                <span class="model-badge-tag badge-preview">Bản xem trước nâng
+                                                    cao</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
                                         <div class="model-popup-item" data-model="gemini-pro-latest" role="menuitem">
                                             <div class="model-popup-item-info">
                                                 <span class="model-popup-item-name">Pro Latest</span>
-                                                <span class="model-badge-tag badge-pro">Chuyên sâu lý luận phức tạp</span>
+                                                <span class="model-badge-tag badge-pro">Chuyên sâu lý luận phức
+                                                    tạp</span>
                                             </div>
                                             <i class="fa-solid fa-check model-popup-item-check"></i>
                                         </div>
@@ -272,19 +296,21 @@
                                 </div>
 
                                 <!-- Native select giữ nguyên đồng bộ trong DOM -->
-                                <select id="quickModelSelect" class="sr-only" tabindex="-1" aria-hidden="true" style="position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px;">
-                                    <option value="gemini-3.5-flash-lite">3.5 Flash-Lite (Khuyên dùng)</option>
-                                    <option value="gemini-flash-lite-latest">Flash Lite Latest (Nhanh)</option>
+                                <select id="quickModelSelect" class="sr-only" tabindex="-1" aria-hidden="true"
+                                    style="position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px;">
+                                    <option value="gemini-3.5-flash" selected>3.5 Flash (Khuyên dùng)</option>
+                                    <option value="gemini-3.8-flash">3.8 Flash (Chất lượng cao)</option>
+                                    <option value="gemini-3.5-flash-lite">3.5 Flash-Lite</option>
+                                    <option value="gemini-flash-lite-latest">Flash Lite Latest</option>
                                     <option value="gemini-3-flash-preview">3 Flash Preview</option>
                                     <option value="gemini-3.1-flash-lite-preview">3.1 Flash Lite Preview</option>
-                                    <option value="gemini-3.5-flash">3.5 Flash (Cân bằng)</option>
-                                    <option value="gemini-3.8-flash">3.8 Flash (Chất lượng cao)</option>
                                     <option value="gemini-pro-latest">Pro (Lý luận)</option>
                                 </select>
                             </div>
 
                             <div class="input-actions-group">
-                                <button type="button" class="tool-btn" id="voiceInputBtn" title="Nhập câu hỏi bằng giọng nói (Speech-to-Text)">
+                                <button type="button" class="tool-btn" id="voiceInputBtn"
+                                    title="Nhập câu hỏi bằng giọng nói (Speech-to-Text)">
                                     <i class="fa-solid fa-microphone"></i>
                                 </button>
                                 <button type="submit" class="send-btn" id="sendBtn" title="Gửi câu hỏi (Enter)">
@@ -295,7 +321,8 @@
                     </form>
 
                     <div class="input-footer-note">
-                        <span>Tra cứu dựa trên <strong>4 tài liệu số hóa</strong> chính thức từ PTIT • Dữ liệu trả về có đối chiếu số trang</span>
+                        <span>Tra cứu dựa trên <strong>4 tài liệu số hóa</strong> chính thức từ PTIT • Dữ liệu trả về có
+                            đối chiếu số trang</span>
                     </div>
                 </div>
             </footer>
@@ -317,9 +344,12 @@
             </div>
             <div class="modal-body">
                 <div class="kb-summary-row">
-                    <div class="stat-pill"><i class="fa-solid fa-cubes"></i> Tổng số chunks: <strong id="modalTotalChunks">348</strong></div>
-                    <div class="stat-pill"><i class="fa-solid fa-file-pdf"></i> Tài liệu: <strong>4 files PDF</strong></div>
-                    <div class="stat-pill"><i class="fa-solid fa-circle-check" style="color: var(--accent-green)"></i> Trạng thái: <strong>100% Vectorized</strong></div>
+                    <div class="stat-pill"><i class="fa-solid fa-cubes"></i> Tổng số chunks: <strong
+                            id="modalTotalChunks">348</strong></div>
+                    <div class="stat-pill"><i class="fa-solid fa-file-pdf"></i> Tài liệu: <strong>4 files PDF</strong>
+                    </div>
+                    <div class="stat-pill"><i class="fa-solid fa-circle-check" style="color: var(--accent-green)"></i>
+                        Trạng thái: <strong>100% Vectorized</strong></div>
                 </div>
                 <div class="catalog-grid" id="catalogGrid">
                     <!-- Populated dynamically -->
@@ -348,28 +378,35 @@
                 <div class="form-group">
                     <label class="form-label" for="customApiKeyInput">
                         <span>Gemini API Key Cá Nhân (Tùy chọn)</span>
-                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="field-link">Lấy API Key miễn phí <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="field-link">Lấy API Key
+                            miễn phí <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
                     </label>
-                    <input type="password" id="customApiKeyInput" class="form-control" placeholder="Dán API Key (bỏ trống để dùng mặc định hệ thống)...">
-                    <small class="form-hint">Nếu API mặc định bị quá tải vào giờ cao điểm, nhập API Key của bạn để trò chuyện mượt mà không giới hạn.</small>
+                    <input type="password" id="customApiKeyInput" class="form-control"
+                        placeholder="Dán API Key (bỏ trống để dùng mặc định hệ thống)...">
+                    <small class="form-hint">Nếu API mặc định bị quá tải vào giờ cao điểm, nhập API Key của bạn để trò
+                        chuyện mượt mà không giới hạn.</small>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label" for="modelSelect">Mô hình AI Ưu tiên (LLM)</label>
                     <select id="modelSelect" class="form-control">
-                        <option value="gemini-3.5-flash-lite" selected>gemini-3.5-flash-lite (Khuyên dùng - Siêu tốc & Ổn định)</option>
-                        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (Bản Lite mới nhất - Rất nhanh)</option>
-                        <option value="gemini-3-flash-preview">gemini-3-flash-preview (Thông minh thế hệ 3.0)</option>
-                        <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview (Bản xem trước)</option>
-                        <option value="gemini-3.5-flash">gemini-3.5-flash (Cân bằng chất lượng)</option>
+                        <option value="gemini-3.5-flash" selected>gemini-3.5-flash (Khuyên dùng - Siêu tốc & Ổn định)
+                        </option>
                         <option value="gemini-3.8-flash">gemini-3.8-flash (Chất lượng cao nhất)</option>
+                        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Bản Lite tiết kiệm)</option>
+                        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (Bản Lite mới nhất - Rất
+                            nhanh)</option>
+                        <option value="gemini-3-flash-preview">gemini-3-flash-preview (Thông minh thế hệ 3.0)</option>
+                        <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview (Bản xem trước)
+                        </option>
                         <option value="gemini-pro-latest">gemini-pro-latest (Chuyên sâu lý luận)</option>
                     </select>
                 </div>
 
                 <div class="form-group">
                     <div class="range-header">
-                        <label class="form-label" for="topKInput">Số lượng đoạn tài liệu đối chiếu (Top-K Chunks):</label>
+                        <label class="form-label" for="topKInput">Số lượng đoạn tài liệu đối chiếu (Top-K
+                            Chunks):</label>
                         <span class="range-val" id="topKValue">4</span>
                     </div>
                     <input type="range" id="topKInput" min="2" max="8" value="4" class="form-range">
@@ -402,7 +439,8 @@
                     <div class="modal-icon"><i class="fa-solid fa-file-lines"></i></div>
                     <div>
                         <h3 class="modal-title" id="sourceModalTitle">Chi Tiết Đoạn Trích Dẫn Gốc</h3>
-                        <p class="modal-subtitle" id="sourceModalSubtitle">Đối chiếu nội dung trong cơ sở tri thức PTIT</p>
+                        <p class="modal-subtitle" id="sourceModalSubtitle">Đối chiếu nội dung trong cơ sở tri thức PTIT
+                        </p>
                     </div>
                 </div>
                 <button class="icon-btn" id="closeSourceModalBtn"><i class="fa-solid fa-xmark"></i></button>
@@ -413,7 +451,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="copySourceContentBtn"><i class="fa-regular fa-copy"></i> Sao chép trích dẫn</button>
+                <button class="btn btn-secondary" id="copySourceContentBtn"><i class="fa-regular fa-copy"></i> Sao chép
+                    trích dẫn</button>
                 <button class="btn btn-primary" id="closeSourceModalFooterBtn">Đóng</button>
             </div>
         </div>
@@ -425,4 +464,5 @@
     <!-- APP JAVASCRIPT -->
     <script src="/static/js/app.js"></script>
 </body>
+
 </html>
