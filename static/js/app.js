@@ -74,6 +74,7 @@ class PTITChatApp {
         this.loadSettings();
         this.loadSessions();
         this.bindEvents();
+        this.autoGrowTextarea();
         this.initSpeechRecognition();
         this.fetchKBStatus();
         this.renderCategorySuggestions();
@@ -248,11 +249,125 @@ class PTITChatApp {
                 if (e.target === modal) modal.classList.remove("active");
             });
         });
+        this.initQuickModelSelector();
+    }
+
+    getModelDisplayLabel(modelId) {
+        const labels = {
+            "gemini-3.5-flash-lite": "3.5 Flash-Lite (Khuyên dùng)",
+            "gemini-flash-lite-latest": "Flash Lite Latest (Nhanh)",
+            "gemini-3-flash-preview": "3 Flash Preview",
+            "gemini-3.1-flash-lite-preview": "3.1 Flash Lite Preview",
+            "gemini-3.5-flash": "3.5 Flash (Cân bằng)",
+            "gemini-3.8-flash": "3.8 Flash (Chất lượng cao)",
+            "gemini-pro-latest": "Pro (Lý luận)"
+        };
+        return labels[modelId] || modelId;
+    }
+
+    initQuickModelSelector() {
+        const wrapper = document.getElementById("modelSelectorWrapper");
+        const btn = document.getElementById("modelSelectorBtn");
+        const label = document.getElementById("modelBtnLabel");
+        const popup = document.getElementById("modelPopupCard");
+        const quickSelect = document.getElementById("quickModelSelect");
+
+        this.updateQuickModelUI = (modelValue) => {
+            const currentModel = modelValue || this.settings.model || "gemini-3.5-flash-lite";
+            if (label) {
+                label.textContent = this.getModelDisplayLabel(currentModel);
+            }
+            if (quickSelect) {
+                quickSelect.value = currentModel;
+            }
+            if (popup) {
+                popup.querySelectorAll(".model-popup-item").forEach(item => {
+                    const isSelected = item.getAttribute("data-model") === currentModel;
+                    item.classList.toggle("selected", isSelected);
+                });
+            }
+        };
+
+        // Initialize state
+        this.updateQuickModelUI(this.settings.model);
+
+        if (!wrapper || !btn || !popup) return;
+
+        // Toggle popup open/close
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const isOpen = popup.classList.contains("show");
+            if (isOpen) {
+                popup.classList.remove("show");
+                wrapper.classList.remove("active");
+                btn.setAttribute("aria-expanded", "false");
+            } else {
+                popup.classList.add("show");
+                wrapper.classList.add("active");
+                btn.setAttribute("aria-expanded", "true");
+            }
+        });
+
+        // Click on item in popup
+        popup.querySelectorAll(".model-popup-item").forEach(item => {
+            item.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const selectedModel = item.getAttribute("data-model");
+                if (selectedModel) {
+                    this.settings.model = selectedModel;
+                    localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
+                    this.updateQuickModelUI(selectedModel);
+                    if (this.modelSelect) {
+                        this.modelSelect.value = selectedModel;
+                    }
+                    if (this.modelBadgeDisplay) {
+                        this.modelBadgeDisplay.textContent = selectedModel;
+                    }
+                    popup.classList.remove("show");
+                    wrapper.classList.remove("active");
+                    btn.setAttribute("aria-expanded", "false");
+                    this.showToast(`Đã chuyển sang mô hình: ${selectedModel}`, "success");
+                }
+            });
+        });
+
+        // Close on click outside
+        document.addEventListener("click", (e) => {
+            if (!wrapper.contains(e.target)) {
+                popup.classList.remove("show");
+                wrapper.classList.remove("active");
+                btn.setAttribute("aria-expanded", "false");
+            }
+        });
+
+        // Close on Escape key
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && popup.classList.contains("show")) {
+                popup.classList.remove("show");
+                wrapper.classList.remove("active");
+                btn.setAttribute("aria-expanded", "false");
+            }
+        });
+
+        if (quickSelect) {
+            quickSelect.addEventListener("change", (e) => {
+                this.settings.model = e.target.value;
+                localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
+                this.updateQuickModelUI(this.settings.model);
+            });
+        }
     }
 
     autoGrowTextarea() {
         this.userInput.style.height = "auto";
-        this.userInput.style.height = Math.min(this.userInput.scrollHeight, 160) + "px";
+        const newHeight = Math.min(this.userInput.scrollHeight, 160);
+        this.userInput.style.height = (newHeight > 38 ? newHeight : 38) + "px";
+        if (newHeight > 46) {
+            this.chatForm.classList.add("multiline");
+        } else {
+            this.chatForm.classList.remove("multiline");
+        }
     }
 
     toggleTheme() {
@@ -301,6 +416,9 @@ class PTITChatApp {
                 console.error("Lỗi đọc cài đặt:", e);
             }
         }
+        if (this.updateQuickModelUI) {
+            this.updateQuickModelUI(this.settings.model);
+        }
     }
 
     openSettingsModal() {
@@ -319,7 +437,12 @@ class PTITChatApp {
         this.settings.autoVoice = this.autoVoiceToggle.checked;
 
         localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
-        this.modelBadgeDisplay.textContent = this.settings.model;
+        if (this.modelBadgeDisplay) {
+            this.modelBadgeDisplay.textContent = this.settings.model;
+        }
+        if (this.updateQuickModelUI) {
+            this.updateQuickModelUI(this.settings.model);
+        }
         this.settingsModal.classList.remove("active");
         this.showToast("Đã lưu cấu hình RAG thành công!", "success");
     }
@@ -338,6 +461,9 @@ class PTITChatApp {
         this.autoVoiceToggle.checked = false;
         localStorage.removeItem("ptit_chat_settings");
         this.modelBadgeDisplay.textContent = "gemini-3.1-flash-lite";
+        if (this.updateQuickModelUI) {
+            this.updateQuickModelUI("gemini-3.1-flash-lite");
+        }
         this.showToast("Đã khôi phục cài đặt mặc định.", "info");
     }
 
@@ -629,7 +755,8 @@ class PTITChatApp {
 
         // Reset Textarea
         this.userInput.value = "";
-        this.userInput.style.height = "auto";
+        this.userInput.style.height = "38px";
+        if (this.chatForm) this.chatForm.classList.remove("multiline");
 
         let currentSession = this.sessions.find(s => s.id === this.currentSessionId);
         if (!currentSession) {
