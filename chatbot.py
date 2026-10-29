@@ -7,6 +7,8 @@ import time
 import warnings
 import cv2
 import numpy as np
+import base64
+import requests
 
 # Tắt cảnh báo thư viện
 warnings.filterwarnings("ignore")
@@ -28,8 +30,15 @@ import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
+from dotenv import load_dotenv
+
+# Tải biến môi trường từ file .env
+load_dotenv()
+
 # Cấu hình Google GenAI Client (dùng SDK mới nhất: google-genai)
-API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_KEY_HERE")
+API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+if not API_KEY:
+    print("[!] Cảnh báo: Chưa tìm thấy GEMINI_API_KEY trong file .env hoặc biến môi trường!")
 
 
 def get_genai_client(api_key=None):
@@ -38,19 +47,81 @@ def get_genai_client(api_key=None):
     return genai.Client(api_key=key)
 
 
-client = get_genai_client()
+client = get_genai_client() if API_KEY else None
 
-# Danh sách model Vision & Chat ưu tiên (tự động luân chuyển khi gặp giới hạn quota hoặc model bận)
+# Danh sách model Vision & Chat ưu tiên (các model nhanh, ổn định đưa lên đầu, loại bỏ model gây chậm/treo)
 VISION_MODELS = [
     "gemini-3.5-flash-lite",
     "gemini-flash-lite-latest",
-    "gemini-3-flash-preview",
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3.5-flash",
     "gemini-3.8-flash",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite-preview",
     "gemini-3.7-flash",
     "gemini-3.6-flash"
 ]
+
+
+def is_blank_page(page):
+    """Kiểm tra xem trang có phải trang trắng / không có nội dung không."""
+    try:
+        text = page.get_text().strip()
+        if len(text) > 0:
+            return False
+        pix = page.get_pixmap(dpi=72)
+        arr = np.frombuffer(pix.samples, dtype=np.uint8)
+        # Nếu hơn 98.5% pixel màu trắng sáng (>240)
+        if (arr > 240).mean() > 0.985:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def call_gemini_vision_rest(img_bytes, prompt, model_name, api_key=API_KEY, timeout=20):
+    """
+    Gọi trực tiếp Google Gemini REST API với timeout nghiêm ngặt (20s).
+    Tránh hoàn toàn lỗi treo/đóng băng mạng (ssl.read) và cảnh báo AFC của SDK.
+    """
+    clean_model = model_name.replace("models/", "").strip()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {
+                    "inline_data": {
+                        "mime_type": "image/jpeg",
+                        "data": base64.b64encode(img_bytes).decode("utf-8")
+                    }
+                }
+            ]
+        }],
+        "generationConfig": {
+            "temperature": 0.1,
+            "maxOutputTokens": 4096
+        }
+    }
+    headers = {"Content-Type": "application/json"}
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
+        if resp.status_code == 200:
+            data = resp.json()
+            candidates = data.get("candidates", [])
+            if candidates and "content" in candidates[0]:
+                parts = candidates[0]["content"].get("parts", [])
+                if parts and "text" in parts[0]:
+                    return parts[0]["text"].strip(), None
+            return "*(Trang ảnh không chứa văn bản hoặc bảng biểu)*", None
+        elif resp.status_code == 429:
+            return None, "QUOTA_EXCEEDED"
+        elif resp.status_code == 404:
+            return None, f"MODEL_NOT_FOUND ({clean_model})"
+        else:
+            return None, f"HTTP {resp.status_code}: {resp.text[:120]}"
+    except requests.exceptions.Timeout:
+        return None, f"TIMEOUT ({timeout}s)"
+    except Exception as e:
+        return None, str(e)
 
 
 def has_table_in_scan(page):
@@ -119,30 +190,27 @@ def classify_page(page):
 
 def extract_with_vision(page, task="scan", max_retries=2):
     """Dùng Gemini Vision trích xuất nội dung từ ảnh, giữ nguyên cấu trúc bảng Markdown."""
+    # 1. Kiểm tra nhanh nếu là trang trắng / không có nội dung
+    if is_blank_page(page):
+        return "*(Trang ảnh này hoàn toàn trắng và không chứa bất kỳ văn bản nào để trích xuất).*"
+
     # Nén trang sang JPEG chất lượng cao để truyền tải nhanh và ổn định
     pix = page.get_pixmap(dpi=150)
     img_bytes = pix.tobytes("jpeg")
-    image_part = types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
 
     # Chọn prompt chuyên dụng theo từng loại trang
-    if task == "scan_table":
+    if task in ("scan_table", "table"):
         prompt = (
-            "Bạn là chuyên gia trích xuất tài liệu và bảng biểu tiếng Việt.\n"
-            "Hình ảnh này là một trang tài liệu scan CÓ CHỨA BẢNG BIỂU (ví dụ bảng mức thu học phí, danh mục, phân loại).\n\n"
+            "Bạn là chuyên gia trích xuất tài liệu tiếng Việt có bảng biểu.\n"
+            "Hãy đọc và trích xuất ĐẦY ĐỦ, NGUYÊN VẸN toàn bộ nội dung trong trang tài liệu này:\n\n"
             "YÊU CẦU BẮT BUỘC:\n"
             "1. Giữ nguyên 100% tiếng Việt có dấu, tuyệt đối không sai hay mất dấu thanh.\n"
-            "2. BẮT BUỘC CHUYỂN TOÀN BỘ BẢNG BIỂU THÀNH ĐỊNH DẠNG BẢNG MARKDOWN (Markdown table):\n"
-            "   - Giữ nguyên tất cả các cột tiêu đề (ví dụ: | TT | HỆ/KHÓA/NGÀNH | ĐVT | MỨC THU | GHI CHÚ |).\n"
-            "   - Giữ nguyên các hàng phân cấp/tiêu đề nhóm (ví dụ: | A | ĐẠI HỌC CHÍNH QUY... | | | |).\n"
-            "   - Giữ đúng từng ô dữ liệu, số tiền, đơn vị tính, không làm xáo trộn cột bảng.\n"
-            "3. Với các văn bản nằm ngoài bảng (như tiêu đề 'PHỤ LỤC', số quyết định, ngày tháng, ghi chú phía dưới):\n"
-            "   - Giữ nguyên ở vị trí tương ứng phía trên hoặc phía dưới của bảng.\n"
-            "4. Không tóm tắt, không thêm lời chào hay giải thích gì thêm."
-        )
-    elif task == "table":
-        prompt = (
-            "Trích xuất toàn bộ dữ liệu bảng biểu có trong ảnh tài liệu này "
-            "thành định dạng bảng Markdown (Markdown table). Giữ nguyên toàn bộ nội dung trong ô, không giải thích."
+            "2. Trích xuất ĐẦY ĐỦ TẤT CẢ văn bản trong trang (tiêu đề, số hiệu, quốc hiệu tiêu ngữ, các câu/đoạn hành chính, thông tin sinh viên, lý do, cam đoan, chữ ký, ghi chú...).\n"
+            "3. BẮT BUỘC CHUYỂN TOÀN BỘ BẢNG BIỂU THÀNH ĐỊNH DẠNG BẢNG MARKDOWN (Markdown table):\n"
+            "   - Giữ nguyên tất cả các cột tiêu đề và hàng phân cấp.\n"
+            "   - Giữ đúng từng ô dữ liệu, số tiền, đơn vị tính, không làm xáo trộn hay mất dòng.\n"
+            "4. TUYỆT ĐỐI KHÔNG bỏ sót bất kỳ dòng văn bản nào ngoài bảng.\n"
+            "5. Không tóm tắt, không thêm lời chào hay giải thích gì thêm."
         )
     else:  # scan văn bản thuần
         prompt = (
@@ -151,32 +219,32 @@ def extract_with_vision(page, task="scan", max_retries=2):
             "Nếu phát hiện bảng biểu, hãy giữ nguyên định dạng bảng Markdown. Không thêm lời giải thích."
         )
 
-    # Thử lần lượt các model trong danh sách VISION_MODELS
+    # Thử lần lượt các model trong danh sách VISION_MODELS qua REST API với timeout nghiêm ngặt
+    quota_exhausted_all = True
     for model_name in VISION_MODELS:
         for attempt in range(max_retries):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=[prompt, image_part]
-                )
-                text = ""
-                if hasattr(response, "text") and response.text:
-                    text = response.text.strip()
-                elif response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                    text = "".join(p.text for p in response.candidates[0].content.parts if hasattr(p, "text") and p.text).strip()
+            text, err = call_gemini_vision_rest(img_bytes, prompt, model_name, api_key=API_KEY, timeout=20)
+            if text:
+                return text
+            if err == "QUOTA_EXCEEDED":
+                print(f"\n    [!] Model '{model_name}' chạm hạn mức (429), chuyển sang model tiếp theo...", end=" ", flush=True)
+                break
+            elif err and "TIMEOUT" in err:
+                print(f"\n    [!] Model '{model_name}' phản hồi quá 20s (Timeout), chuyển model tiếp theo...", end=" ", flush=True)
+                quota_exhausted_all = False
+                break
+            elif err and "MODEL_NOT_FOUND" in err:
+                break
+            else:
+                quota_exhausted_all = False
+                time.sleep(1)
 
-                if text:
-                    return text
-            except Exception as e:
-                err_str = str(e)
-                # Nếu chạm quota (429 / ResourceExhausted), chuyển sang model tiếp theo
-                if "429" in err_str or "quota" in err_str.lower():
-                    print(f"\n    [!] Model '{model_name}' chạm hạn mức, chuyển sang model dự phòng...", end=" ", flush=True)
-                    break
-                time.sleep(3)
+    if quota_exhausted_all:
+        print("\n    [!] Cảnh báo: Tất cả mô hình Gemini đều đã hết lượt dùng hôm nay.", end=" ", flush=True)
+        return None
 
-    print("\n    [!] Cảnh báo: Tất cả mô hình Gemini đều đã hết lượt dùng hôm nay.", end=" ", flush=True)
-    return None
+    # Nếu các model đều không nhận diện được chữ (ảnh đồ họa / trắng không chữ)
+    return "*(Trang ảnh không chứa văn bản hoặc bảng biểu)*"
 
 
 def process_page(page, page_num, page_type=None):
@@ -427,13 +495,14 @@ def chunk_markdown_file(md_file_path, chunk_size=1000, chunk_overlap=150):
     return chunks
 
 
-def embed_markdown_files(processed_dir="processed_data", batch_size=15):
+def embed_markdown_files(processed_dir="processed_data", batch_size=15, force_reembed_file=None):
     """
     Xử lý các file .md trong thư mục processed_data:
     - Băm nhỏ (chunking)
     - Tạo vector embedding
     - Lưu vào ChromaDB
     - Tự động bỏ qua các file hoặc chunk đã được nhúng trước đó để tránh trùng lặp.
+    - Hỗ trợ xóa và nhúng lại nếu truyền force_reembed_file.
     """
     md_files = sorted(glob.glob(os.path.join(processed_dir, "*.md")))
     if not md_files:
@@ -446,6 +515,14 @@ def embed_markdown_files(processed_dir="processed_data", batch_size=15):
 
     collection = get_vector_db()
     embedding_model = get_embedding_model()
+
+    if force_reembed_file:
+        target_name = os.path.basename(force_reembed_file)
+        try:
+            collection.delete(where={"source": target_name})
+            print(f"[*] Đã xóa các vector chunks cũ của '{target_name}' để cập nhật nội dung mới.")
+        except Exception as e:
+            print(f"[!] Lỗi khi xóa chunk cũ của {target_name}: {e}")
 
     # Lấy toàn bộ ID đã có trong ChromaDB để tránh xử lý lại
     existing_ids = set(collection.get()["ids"])
@@ -533,16 +610,40 @@ def query_knowledge_base(query, n_results=4):
     return matched_docs
 
 
+def call_gemini_text_rest(prompt, model_name, api_key=API_KEY, timeout=10):
+    """Gọi trực tiếp Google Gemini REST API cho text với timeout 10s."""
+    clean_model = model_name.replace("models/", "").strip()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048}
+    }
+    headers = {"Content-Type": "application/json"}
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
+        if resp.status_code == 200:
+            data = resp.json()
+            candidates = data.get("candidates", [])
+            if candidates and "content" in candidates[0]:
+                parts = candidates[0]["content"].get("parts", [])
+                if parts and "text" in parts[0]:
+                    return parts[0]["text"].strip(), None
+            return None, "Empty response"
+        return None, f"HTTP {resp.status_code}"
+    except Exception as e:
+        return None, str(e)
+
+
 def ask_chatbot(question, n_results=4):
     """Trả lời câu hỏi bằng cách kết hợp Vector Search (RAG) và Gemini LLM."""
     print(f"\n[?] Câu hỏi: {question}")
 
-    docs = query_knowledge_base(question, n_results=n_results)
     try:
-        from app import expand_context_for_tables
+        from app import safe_query_knowledge_base, expand_context_for_tables
+        docs = safe_query_knowledge_base(question, n_results=n_results)
         docs = expand_context_for_tables(question, docs)
     except Exception:
-        pass
+        docs = query_knowledge_base(question, n_results=n_results)
 
     if not docs:
         print("[!] Không tìm thấy thông tin phù hợp trong cơ sở tri thức.")
@@ -556,47 +657,67 @@ def ask_chatbot(question, n_results=4):
 
     prompt = f"""
 Bạn là Trợ lý Ảo Thông Minh của Học viện Công nghệ Bưu chính Viễn thông (PTIT).
-Dưới đây là thông tin trích xuất từ tài liệu chính thức:
+Dưới đây là thông tin trích xuất từ tài liệu chính thức của Học viện:
 
 {context_str}
 
-Câu hỏi của người dùng: {question}
+CÂU HỎI CỦA NGƯỜI DÙNG: {question}
 
 CÁC NGUYÊN TẮC BẮT BUỘC KHI TRẢ LỜI:
-1. ĐÚNG TRỌNG TÂM - ĐẦY ĐỦ THÔNG TIN TỪNG KHÓA VÀ CÁC HỆ ĐÀO TẠO:
-   - Khi hỏi về học phí trong một năm học mà KHÔNG chỉ rõ khóa nào: BẮT BUỘC liệt kê ĐẦY ĐỦ TỪNG KHÓA (Khóa 2021, 2022, 2023, 2024, 2025, 2026...) và TẤT CẢ CÁC HỆ/CHƯƠNG TRÌNH ĐÀO TẠO (Đại học chính quy đại trà, Chất lượng cao, Tiên tiến/đặc thù) có trong tài liệu. Tuyệt đối không được bỏ sót khóa nào.
-   - Khi hỏi về MỘT KHÓA CỤ THỂ (ví dụ: Khóa 2023): BẮT BUỘC liệt kê ĐẦY ĐỦ TẤT CẢ CÁC CHƯƠNG TRÌNH ĐÀO TẠO của khóa đó (Chính quy đại trà, Chất lượng cao, Tiên tiến/đặc thù).
-   - TUYỆT ĐỐI KHÔNG liệt kê sang các ngành hoàn toàn khác không liên quan.
-2. ĐÁNH SỐ THỨ TỰ (STT) BẮT BUỘC CHUẨN XÁC, TUẦN TỰ:
-   - Cột STT bắt buộc phải đánh số tự nhiên liên tục: 1, 2, 3, 4, 5... từ đầu đến cuối bảng.
-   - TUYỆT ĐỐI KHÔNG dùng số La Mã (I, II, III), không chép số thứ tự rải rác hoặc không đồng nhất từ văn bản gốc, không lặp lại số STT.
+1. TRẢ LỜI ĐÚNG TRỌNG TÂM - TUYỆT ĐỐI KHÔNG LẠC ĐỀ:
+   - Nếu câu hỏi về MÔN HỌC / HỌC PHẦN / CHƯƠNG TRÌNH ĐÀO TẠO: TUYỆT ĐỐI KHÔNG ĐƯA BẢNG MỨC THU HỌC PHÍ hay số tiền học phí.
+   - Nếu câu hỏi về HỌC PHÍ / MỨC THU: Trả lời về biểu phí, số tiền, khóa học theo quy định học phí.
+   - Nếu câu hỏi về HỌC BỔNG / ĐIỂM CHUẨN HỌC BỔNG: Trả lời về điểm TBCMR (GPA), điểm rèn luyện (ĐRL) và số tiền học bổng theo đúng ngành, khóa và cơ sở đào tạo.
+
+2. KHI TRẢ LỜI VỀ MÔN HỌC / HỌC PHẦN / KẾ HOẠCH HỌC TẬP:
+   - Cung cấp đầy đủ, chính xác các thông tin có trong tài liệu:
+     + Tên môn học chính xác
+     + Mã môn học (Mã HP, ví dụ: INT14151, INT1404...)
+     + Số tín chỉ (TC)
+     + Học kỳ giảng dạy (HK)
+     + Môn học tiên quyết (nếu có trong tài liệu, ví dụ: INT1340)
+     + Số tiết: Lý thuyết, Bài tập/Thảo luận, Tự học
+     + Thuộc chuyên ngành / hướng chuyên sâu nào (ví dụ: Công nghệ phần mềm, Hệ thống thông tin...)
+   - Khi người dùng hỏi về một môn cụ thể (ví dụ: "Phát triển các hệ thống thông minh"): Hãy trả lời trực tiếp và đầy đủ các thông số của môn học đó. Nếu có các môn học tương tự hoặc cùng nhóm liên quan trong khung đào tạo, có thể liệt kê thêm bên dưới để hỗ trợ sinh viên.
+
+3. KHI TRẢ LỜI VỀ HỌC PHÍ:
+   - Khi hỏi về học phí trong một năm học mà không chỉ rõ khóa: Liệt kê đầy đủ từng khóa (Khóa 2021, 2022, 2023, 2024, 2025...) và tất cả các chương trình đào tạo có trong tài liệu.
    - Bảng Markdown chuẩn gồm các cột:
      | STT | Chương trình đào tạo | Ngành / Chuyên ngành | Khóa tuyển sinh | Đơn vị tính | Mức thu học phí |
-3. TUYỆT ĐỐI KHÔNG TRÍCH DẪN NGUỒN TRONG VĂN BẢN:
-   - KHÔNG nhắc đến tên file (hp_2025.md, hp_2026.md, ctdt...), KHÔNG nhắc đến số trang tài liệu, KHÔNG tạo mục "Nguồn tài liệu tham khảo".
-4. ĐI THẲNG VÀO NỘI DUNG:
-   - Nêu rõ ngành học, năm học và quyết định tương ứng.
+   - Cột STT bắt buộc phải đánh số liên tục: 1, 2, 3...
+
+4. KHI TRẢ LỜI VỀ HỌC BỔNG KHUYẾN KHÍCH HỌC TẬP (HK1 NĂM HỌC 2025 - 2026):
+   - Phân biệt rõ ràng giữa 2 cơ sở đào tạo:
+     + Cơ sở Hà Nội (Phía Bắc): Điểm chuẩn TBCMR (GPA hệ 4) và Điểm Rèn luyện (ĐRL) cho từng loại (Xuất sắc, Giỏi, Khá).
+     + Cơ sở TP. Hồ Chí Minh (Phía Nam): Điểm chuẩn TBCMR (GPA hệ 4) và Điểm Rèn luyện (ĐRL) cho từng loại (Xuất sắc, Giỏi, Khá).
+   - Nếu trong bảng có dấu gạch ngang (-) cho một mức học bổng (ví dụ mức Khá), nêu rõ cơ sở đó không xét / không có mức điểm chuẩn cho loại học bổng này.
+   - Nêu rõ số tiền học bổng tương ứng từng loại (Xuất sắc, Giỏi, Khá) bằng đơn vị VNĐ (Ví dụ: 17.480 nghìn đồng = 17.480.000 đ, 19.228 nghìn đồng = 19.228.000 đ, 20.976 nghìn đồng = 20.976.000 đ).
+
+5. TUYỆT ĐỐI KHÔNG TRÍCH DẪN NGUỒN TÊN FILE TRONG VĂN BẢN:
+   - KHÔNG nhắc đến tên file nội bộ (hp_2025.md, mon_hoc.md, ct_cntt.md, HB_HK1_25-26.md...), KHÔNG nhắc số trang tài liệu, KHÔNG tạo mục "Nguồn tài liệu tham khảo".
+
+6. ĐỊNH DẠNG VĂN BẢN VÀ KÝ HIỆU TOÁN HỌC (RẤT QUAN TRỌNG):
+   - TUYỆT ĐỐI KHÔNG sử dụng ký hiệu LaTeX toán học như $\ge$, $\le$, $\times$ hay bao bọc bởi dấu $.
+   - Hãy viết tự nhiên bằng tiếng Việt: "từ 3,60 trở lên", "từ 90 trở lên" hoặc dùng ký hiệu phổ thông ">= 3,60", ">= 90".
+
+7. KHI TRẢ LỜI VỀ MẪU ĐƠN SINH VIÊN (VẮNG THI, NGHỈ HỌC, THÔI HỌC, XIN ĐỔI CA THI, XIN HOÃN THI...):
+   - Cung cấp toàn bộ mẫu đơn nguyên vẹn, chi tiết, đầy đủ từng phần: Quốc hiệu tiêu ngữ, Kính gửi, Thông tin sinh viên (Họ tên, Mã SV, Lớp, SĐT...), Bảng danh sách học phần/môn học (nếu có), Lý do chi tiết, Lời cam đoan, phần Chữ ký của sinh viên và phần Xác nhận/Duyệt của các phòng ban liên quan (Khoa, Phòng Đào tạo, Trung tâm KT&ĐBCLGD...).
+   - TUYỆT ĐỐI KHÔNG chỉ trích xuất vài dòng kẻ bảng cụt lủn hoặc bỏ sót nội dung mẫu đơn. Trình bày biểu mẫu rõ ràng, cân đối bằng văn bản hoặc bảng Markdown để sinh viên có thể sao chép hoặc in ra sử dụng ngay.
+
+8. VĂN PHONG RÕ RÀNG, CHUẨN XÁC, THÂN THIỆN:
+   - Đi thẳng vào nội dung cần trả lời.
 """
 
     for m_name in VISION_MODELS:
-        try:
-            response = client.models.generate_content(
-                model=m_name,
-                contents=prompt
-            )
-            if response and response.text:
-                answer = response.text.strip()
-                try:
-                    from app import clean_llm_response
-                    answer = clean_llm_response(answer)
-                except Exception:
-                    pass
-                print(f"\n[Chatbot Trả lời]:\n{answer}\n")
-                return answer
-        except Exception as e:
-            if "429" in str(e) or "quota" in str(e).lower():
-                continue
-            print(f"[!] Lỗi khi gọi mô hình {m_name}: {e}")
+        answer, err = call_gemini_text_rest(prompt, m_name, API_KEY, timeout=10)
+        if answer:
+            try:
+                from app import clean_llm_response
+                answer = clean_llm_response(answer)
+            except Exception:
+                pass
+            print(f"\n[Chatbot Trả lời]:\n{answer}\n")
+            return answer
 
     # Fallback nếu LLM bận hoặc hết quota
     try:
@@ -634,25 +755,9 @@ if __name__ == "__main__":
     # Tự động bỏ qua các file hoặc chunk đã nhúng trước đó
     embed_markdown_files(processed_dir="processed_data", batch_size=15)
 
-    # 2. Kiểm tra nếu có câu hỏi trực tiếp từ tham số dòng lệnh
-    if len(sys.argv) > 1:
-        query = " ".join(sys.argv[1:])
-        ask_chatbot(query)
-    else:
-        # Chế độ hỏi đáp tương tác trực tiếp
-        print("\n" + "="*60)
-        print("[*] SẴN SÀNG HỎI ĐÁP VỚI CƠ SỞ TRI THỨC PTIT (Gõ 'exit' để thoát):")
-        print("💡 Gợi ý: Chạy 'python app.py' hoặc 'python chatbot.py --web' để mở giao diện Web hiện đại!")
-        print("="*60)
-        while True:
-            try:
-                user_q = input("\nBạn: ").strip()
-                if not user_q or user_q.lower() in ("exit", "quit", "q"):
-                    print("Tạm biệt!")
-                    break
-                ask_chatbot(user_q)
-            except (KeyboardInterrupt, EOFError):
-                print("\nĐã thoát chương trình.")
-                break
+    print("\n" + "="*60)
+    print("✅ ĐÃ HOÀN TẤT XỬ LÝ VÀ NHÚNG TÀI LIỆU VÀO CƠ SỞ TRI THỨC!")
+    print("💡 Khởi chạy giao diện Web bằng lệnh: python app.py")
+    print("="*60 + "\n")
 
 

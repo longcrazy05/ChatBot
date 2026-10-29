@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files (Python bytecode)
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Environment variables & Secrets (Không đẩy API keys lên Git)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Cho phép commit file mẫu .env.example
+!.env.example
+
+# Vector Database (Dữ liệu nhúng cục bộ sinh tự động, tránh nặng repo và xung đột git)
+chroma_db/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE & Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & temp files
+*.log

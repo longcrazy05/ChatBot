@@ -60,23 +60,6 @@
                 </div>
             </div>
 
-            <!-- KNOWLEDGE BASE STATS -->
-            <div class="sidebar-section kb-stats-section">
-                <div class="section-title">
-                    <span>Cơ sở tri thức (RAG)</span>
-                    <span class="badge-live" id="kbStatusBadge"><span class="pulse-dot"></span> Sẵn sàng</span>
-                </div>
-                <div class="kb-cards">
-                    <div class="kb-stat-card" id="openKbModalBtn" title="Xem chi tiết các tài liệu đã lập chỉ mục">
-                        <div class="kb-stat-icon"><i class="fa-solid fa-database"></i></div>
-                        <div class="kb-stat-text">
-                            <span class="kb-count" id="totalChunksDisplay">348 Chunks</span>
-                            <span class="kb-label">Vector ChromaDB</span>
-                        </div>
-                        <i class="fa-solid fa-chevron-right kb-arrow"></i>
-                    </div>
-                </div>
-            </div>
 
             <!-- SIDEBAR FOOTER -->
             <div class="sidebar-footer">
@@ -112,10 +95,6 @@
                     </div>
                 </div>
                 <div class="navbar-right">
-                    <button class="action-btn-pill" id="viewDocsNavbarBtn" title="Xem danh mục 4 tài liệu gốc">
-                        <i class="fa-solid fa-book-open"></i>
-                        <span class="desktop-only">Tài liệu PTIT</span>
-                    </button>
                     <button class="icon-btn" id="exportChatBtn" title="Xuất nội dung trò chuyện (Markdown)">
                         <i class="fa-solid fa-arrow-up-from-bracket"></i>
                     </button>
@@ -137,8 +116,7 @@
                     </div>
                     <h2 class="hero-title">Xin chào! Tôi có thể giúp gì cho bạn?</h2>
                     <p class="hero-desc">
-                        Hệ thống Trợ lý AI kết hợp tìm kiếm ngữ nghĩa <strong>ChromaDB Vector Store</strong> 
-                        và mô hình ngôn ngữ <strong>Gemini</strong>, được huấn luyện trên toàn bộ văn bản chính thức của Học viện PTIT.
+                        Hệ thống Trợ lý AI hỗ trợ giải đáp thông tin học phí, quy chế đào tạo, chương trình học và mẫu đơn biểu sinh viên Học viện PTIT.
                     </p>
 
                     <!-- QUICK FILTER PILLS -->
@@ -209,42 +187,11 @@
                         </div>
                     </form>
 
-                    <div class="input-footer-note">
-                        <span>Tra cứu dựa trên <strong>4 tài liệu số hóa</strong> chính thức từ PTIT • Dữ liệu trả về có đối chiếu số trang</span>
-                    </div>
                 </div>
             </footer>
         </main>
     </div>
 
-    <!-- MODAL: KNOWLEDGE BASE CATALOG -->
-    <div class="modal-backdrop" id="kbModal">
-        <div class="modal-content modal-lg">
-            <div class="modal-header">
-                <div class="modal-title-group">
-                    <div class="modal-icon"><i class="fa-solid fa-book-atlas"></i></div>
-                    <div>
-                        <h3 class="modal-title">Cơ Sở Dữ Liệu Số Hóa PTIT</h3>
-                        <p class="modal-subtitle">Kho văn bản đã được băm nhỏ và tạo vector lưu trữ trong ChromaDB</p>
-                    </div>
-                </div>
-                <button class="icon-btn" id="closeKbModalBtn"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="modal-body">
-                <div class="kb-summary-row">
-                    <div class="stat-pill"><i class="fa-solid fa-cubes"></i> Tổng số chunks: <strong id="modalTotalChunks">348</strong></div>
-                    <div class="stat-pill"><i class="fa-solid fa-file-pdf"></i> Tài liệu: <strong>4 files PDF</strong></div>
-                    <div class="stat-pill"><i class="fa-solid fa-circle-check" style="color: var(--accent-green)"></i> Trạng thái: <strong>100% Vectorized</strong></div>
-                </div>
-                <div class="catalog-grid" id="catalogGrid">
-                    <!-- Populated dynamically -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="closeKbModalFooterBtn">Đóng</button>
-            </div>
-        </div>
-    </div>
 
     <!-- MODAL: SETTINGS & API KEY -->
     <div class="modal-backdrop" id="settingsModal">
@@ -272,13 +219,14 @@
                 <div class="form-group">
                     <label class="form-label" for="modelSelect">Mô hình AI Ưu tiên (LLM)</label>
                     <select id="modelSelect" class="form-control">
-                        <option value="gemini-3.5-flash-lite" selected>gemini-3.5-flash-lite (Khuyên dùng - Siêu tốc & Ổn định)</option>
-                        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (Bản Lite mới nhất - Rất nhanh)</option>
-                        <option value="gemini-3-flash-preview">gemini-3-flash-preview (Thông minh thế hệ 3.0)</option>
-                        <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview (Bản xem trước)</option>
-                        <option value="gemini-3.5-flash">gemini-3.5-flash (Cân bằng chất lượng)</option>
-                        <option value="gemini-3.8-flash">gemini-3.8-flash (Chất lượng cao nhất)</option>
-                        <option value="gemini-pro-latest">gemini-pro-latest (Chuyên sâu lý luận)</option>
+                        <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (Khuyên dùng - Siêu tốc &amp; Ổn định nhất)</option>
+                        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Bản Lite tốc độ cao)</option>
+                        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (Bản Flash Lite mới nhất)</option>
+                        <option value="gemini-3-flash-preview">gemini-3-flash-preview (Bản Flash 3.0 Preview)</option>
+                        <option value="gemini-3.6-flash">gemini-3.6-flash (Thế hệ 3.6)</option>
+                        <option value="gemini-flash-latest">gemini-flash-latest (Bản Flash tiêu chuẩn)</option>
+                        <option value="gemini-3.5-flash">gemini-3.5-flash (Bản 3.5 tiêu chuẩn)</option>
+                        <option value="gemini-3.7-flash">gemini-3.7-flash (Thế hệ 3.7)</option>
                     </select>
                 </div>
 

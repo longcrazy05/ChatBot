@@ -318,63 +318,21 @@ HỌC VIỆN
 ## Trang 9 - [TEXT]
 
 - 11 -
-SƠ ĐỒ MẶT BẰNG CƠ SỞ ĐÀO TẠO HÀ NỘI 
-Đườn N u ễn Trãi 
-Hà Đông 
-Ngã tư sở 
-KÝ TÚC XÁ B1 (5 tầng) 
-KÝ TÚC XÁ
-B5 (5 tầng) 
-HỘI TRƯỜNG SỐ 1 
-SÂN
-BÓNG
-ĐÁ 
-SÂN
- TENNIS
-NHÀ A3 (6 tầng) 
-(Khu vực các phòng học,
- phòng thí nghiệm, thực
-hành, Trung tâm TTTV)
-NHÀ A2 (12 tầng)
-Khu vực các phòng học 
-(Tầng G: TT KT&ĐBCGD; TT DV; Tầng 9; 10: Văn
- phòng các Khoa, Bộ môn và Khoa ĐTSĐ H) 
-NHÀ ĂN 
-Cán bộ, 
-Sinh viên
-Nhà B9 (Khu vực các phòng học)
-Nhà B16 (Khu vực các phòng học) 
-Nhà B17 (Khu vực các phòng học)
-...
-B14
-...
-VP Đoàn TN 
-Sân tập, học 
-GDTC
-Sân tập, học 
-GDTC
-SÂN BÓNG
-CHUYỀN 
-Cổng phụ 
-Nơi ti p, làm việc
-với sinh viên 
-BUS
-Bãi
-để 
-xe
-Ôtô
-CỔNG CHÍNH 
-KTX B2 (5 tầng) 
-Nhàxe cán bộ,
-giảng viên 
-Trạm Y t  
-HỘI TRƯỜNG SỐ 2 
-NHÀ A1 (5 Tầng) 
-(Khu vực làm việc của LĐHV, phòng GV,
-phòngCT&CTSV, TT KT&ĐBCLGD và
-các Viện/Phòng/Trung tâm chức năng)
-NHÀ XE
-(sinh viên)
+SƠ ĐỒ MẶT BẰNG CƠ SỞ ĐÀO TẠO HÀ NỘI (Km10 Đường Nguyễn Trãi, Hà Đông, Hà Nội)
+
+Thông tin các khu vực, giảng đường và Ký túc xá trong khuôn viên Học viện:
+- **KÝ TÚC XÁ B2 (KTX B2 - 5 tầng):** Nằm ngay gần Cổng chính (mặt đường Nguyễn Trãi), cạnh Nhà xe cán bộ, giảng viên, gần Trạm Y tế và Hội trường số 2.
+- **KÝ TÚC XÁ B1 (KTX B1 - 5 tầng):** Khu ký túc xá sinh viên nội trú.
+- **KÝ TÚC XÁ B5 (KTX B5 - 5 tầng):** Khu ký túc xá sinh viên nội trú.
+- **CỔNG CHÍNH:** Đường Nguyễn Trãi, Hà Đông (hướng đi Ngã Tư Sở - Hà Đông).
+- **CỔNG PHỤ:** Nơi tiếp và làm việc với sinh viên, gần điểm xe bus.
+- **TRẠM Y TẾ:** Nằm cạnh KTX B2 và Hội trường số 2, phục vụ chăm sóc sức khỏe sinh viên và cán bộ.
+- **NHÀ A1 (5 Tầng):** Khu vực làm việc của Lãnh đạo Học viện, Phòng Giáo vụ, Phòng Chính trị và Công tác sinh viên (CT&CTSV), Trung tâm Khảo thí & Đảm bảo chất lượng giáo dục (TT KT&ĐBCLGD) và các phòng/viện/trung tâm chức năng.
+- **NHÀ A2 (12 Tầng):** Tòa nhà giảng đường chính, khu vực các phòng học lý thuyết (Tầng G: TT KT&ĐBCLGD, TT Dịch vụ; Tầng 9, 10: Văn phòng các Khoa, Bộ môn và Khoa Đào tạo Sau Đại học).
+- **NHÀ A3 (6 Tầng):** Khu vực phòng học, phòng thí nghiệm, phòng thực hành và Trung tâm Thông tin Thư viện (TTTV).
+- **CÁC KHU NHÀ HỌC KHÁC:** Nhà B9, Nhà B14, Nhà B16, Nhà B17 (Khu vực các phòng học lý thuyết).
+- **KHU THỂ THAO & TIỆN ÍCH:** Sân bóng đá, Sân Tennis, Sân bóng chuyền, Sân tập Giáo dục thể chất (GDTC), Hội trường số 1, Hội trường số 2, Nhà ăn sinh viên và cán bộ, Bãi để xe sinh viên và ô tô.
+- **VĂN PHÒNG ĐOÀN THANH NIÊN (VP Đoàn TN):** Nằm trong khuôn viên trường.
 
 ---
 

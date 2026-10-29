@@ -2884,3 +2884,9 @@ Danh sách gồm 04 học phần
 
 ---
 
+## Trang 14 - [SCAN]
+
+*(Trang ảnh không chứa văn bản hoặc bảng biểu)*
+
+---
+

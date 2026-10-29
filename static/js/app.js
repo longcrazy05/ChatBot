@@ -56,7 +56,7 @@ class PTITChatApp {
         this.sessions = [];
         this.settings = {
             apiKey: "",
-            model: "gemini-3.5-flash-lite",
+            model: "gemini-3.1-flash-lite",
             topK: 4,
             autoVoice: false
         };
@@ -213,33 +213,37 @@ class PTITChatApp {
         });
 
         // Modals Open/Close
-        this.openKbModalBtn.addEventListener("click", () => this.openKbModal());
-        this.viewDocsNavbarBtn.addEventListener("click", () => this.openKbModal());
-        this.closeKbModalBtn.addEventListener("click", () => this.kbModal.classList.remove("active"));
-        this.closeKbModalFooterBtn.addEventListener("click", () => this.kbModal.classList.remove("active"));
+        if (this.openKbModalBtn) this.openKbModalBtn.addEventListener("click", () => this.openKbModal());
+        if (this.viewDocsNavbarBtn) this.viewDocsNavbarBtn.addEventListener("click", () => this.openKbModal());
+        if (this.closeKbModalBtn) this.closeKbModalBtn.addEventListener("click", () => this.kbModal && this.kbModal.classList.remove("active"));
+        if (this.closeKbModalFooterBtn) this.closeKbModalFooterBtn.addEventListener("click", () => this.kbModal && this.kbModal.classList.remove("active"));
 
-        this.openSettingsBtn.addEventListener("click", () => this.openSettingsModal());
-        this.closeSettingsModalBtn.addEventListener("click", () => this.settingsModal.classList.remove("active"));
-        this.saveSettingsBtn.addEventListener("click", () => this.saveSettings());
-        this.resetSettingsBtn.addEventListener("click", () => this.resetSettings());
+        if (this.openSettingsBtn) this.openSettingsBtn.addEventListener("click", () => this.openSettingsModal());
+        if (this.closeSettingsModalBtn) this.closeSettingsModalBtn.addEventListener("click", () => this.settingsModal && this.settingsModal.classList.remove("active"));
+        if (this.saveSettingsBtn) this.saveSettingsBtn.addEventListener("click", () => this.saveSettings());
+        if (this.resetSettingsBtn) this.resetSettingsBtn.addEventListener("click", () => this.resetSettings());
 
-        this.topKInput.addEventListener("input", () => {
-            this.topKValue.textContent = this.topKInput.value;
-        });
-
-        this.closeSourceModalBtn.addEventListener("click", () => this.sourceModal.classList.remove("active"));
-        this.closeSourceModalFooterBtn.addEventListener("click", () => this.sourceModal.classList.remove("active"));
-        this.copySourceContentBtn.addEventListener("click", () => {
-            navigator.clipboard.writeText(this.sourceModalContent.textContent).then(() => {
-                this.showToast("Đã sao chép nội dung trích dẫn!", "success");
+        if (this.topKInput) {
+            this.topKInput.addEventListener("input", () => {
+                if (this.topKValue) this.topKValue.textContent = this.topKInput.value;
             });
-        });
+        }
+
+        if (this.closeSourceModalBtn) this.closeSourceModalBtn.addEventListener("click", () => this.sourceModal && this.sourceModal.classList.remove("active"));
+        if (this.closeSourceModalFooterBtn) this.closeSourceModalFooterBtn.addEventListener("click", () => this.sourceModal && this.sourceModal.classList.remove("active"));
+        if (this.copySourceContentBtn) {
+            this.copySourceContentBtn.addEventListener("click", () => {
+                navigator.clipboard.writeText(this.sourceModalContent ? this.sourceModalContent.textContent : "").then(() => {
+                    this.showToast("Đã sao chép nội dung!", "success");
+                });
+            });
+        }
 
         // Voice Input
-        this.voiceInputBtn.addEventListener("click", () => this.toggleVoiceInput());
+        if (this.voiceInputBtn) this.voiceInputBtn.addEventListener("click", () => this.toggleVoiceInput());
 
         // Close modals on backdrop click
-        [this.kbModal, this.settingsModal, this.sourceModal].forEach(modal => {
+        [this.kbModal, this.settingsModal, this.sourceModal].filter(Boolean).forEach(modal => {
             modal.addEventListener("click", (e) => {
                 if (e.target === modal) modal.classList.remove("active");
             });
@@ -279,9 +283,18 @@ class PTITChatApp {
         if (savedSettings) {
             try {
                 this.settings = { ...this.settings, ...JSON.parse(savedSettings) };
-                // Tự động chuyển đổi nếu model cũ là gemini-3.8-flash (đang bị quá tải 503)
-                if (this.settings.model === "gemini-3.8-flash" || !this.settings.model) {
-                    this.settings.model = "gemini-3.5-flash-lite";
+                const validModels = [
+                    "gemini-3.1-flash-lite",
+                    "gemini-3.5-flash-lite",
+                    "gemini-flash-lite-latest",
+                    "gemini-3-flash-preview",
+                    "gemini-3.6-flash",
+                    "gemini-flash-latest",
+                    "gemini-3.5-flash",
+                    "gemini-3.7-flash"
+                ];
+                if (!this.settings.model || !validModels.includes(this.settings.model) || this.settings.model === "gemini-2.5-flash" || this.settings.model === "gemini-3.6-flash") {
+                    this.settings.model = "gemini-3.1-flash-lite";
                     localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
                 }
             } catch (e) {
@@ -292,7 +305,7 @@ class PTITChatApp {
 
     openSettingsModal() {
         this.customApiKeyInput.value = this.settings.apiKey || "";
-        this.modelSelect.value = this.settings.model || "gemini-3.5-flash-lite";
+        this.modelSelect.value = this.settings.model || "gemini-3.1-flash-lite";
         this.topKInput.value = this.settings.topK || 4;
         this.topKValue.textContent = this.topKInput.value;
         this.autoVoiceToggle.checked = !!this.settings.autoVoice;
@@ -314,17 +327,17 @@ class PTITChatApp {
     resetSettings() {
         this.settings = {
             apiKey: "",
-            model: "gemini-3.5-flash-lite",
+            model: "gemini-3.1-flash-lite",
             topK: 4,
             autoVoice: false
         };
         this.customApiKeyInput.value = "";
-        this.modelSelect.value = "gemini-3.5-flash-lite";
+        this.modelSelect.value = "gemini-3.1-flash-lite";
         this.topKInput.value = 4;
         this.topKValue.textContent = "4";
         this.autoVoiceToggle.checked = false;
         localStorage.removeItem("ptit_chat_settings");
-        this.modelBadgeDisplay.textContent = "gemini-3.5-flash-lite";
+        this.modelBadgeDisplay.textContent = "gemini-3.1-flash-lite";
         this.showToast("Đã khôi phục cài đặt mặc định.", "info");
     }
 
@@ -488,10 +501,20 @@ class PTITChatApp {
         if (msg.role === "user") {
             bubbleDiv.textContent = msg.content;
         } else {
-            // Render Bot Markdown
-            let htmlContent = msg.content;
+            // Render Bot Markdown with LaTeX cleanup
+            let textToRender = msg.content || "";
+            textToRender = textToRender.replace(/\$\s*\\ge(q)?\s*([^$]+)\$/g, "từ $2 trở lên");
+            textToRender = textToRender.replace(/\$\s*\\le(q)?\s*([^$]+)\$/g, "dưới hoặc bằng $2");
+            textToRender = textToRender.replace(/\$\s*\\ge(q)?\s*\$/g, "từ ");
+            textToRender = textToRender.replace(/\$\s*\\le(q)?\s*\$/g, "dưới hoặc bằng ");
+            textToRender = textToRender.replace(/\\ge(q)?\b/g, ">=");
+            textToRender = textToRender.replace(/\\le(q)?\b/g, "<=");
+            textToRender = textToRender.replace(/\$([^$]+)\$/g, "$1");
+            textToRender = textToRender.replace(/\$/g, "");
+
+            let htmlContent = textToRender;
             if (window.marked) {
-                htmlContent = marked.parse(msg.content);
+                htmlContent = marked.parse(textToRender);
             }
             bubbleDiv.innerHTML = htmlContent;
 
@@ -557,44 +580,7 @@ class PTITChatApp {
                 });
             });
 
-            // Append Sources if present
-            if (msg.sources && msg.sources.length > 0) {
-                const sourcesContainer = document.createElement("div");
-                sourcesContainer.className = "msg-sources-container";
-
-                const toggleBtn = document.createElement("button");
-                toggleBtn.className = "sources-toggle-btn";
-                toggleBtn.innerHTML = `<i class="fa-solid fa-book-bookmark"></i> <span>Trích dẫn ${msg.sources.length} tài liệu đối chiếu</span> <i class="fa-solid fa-chevron-down"></i>`;
-
-                const cardsList = document.createElement("div");
-                cardsList.className = "sources-cards-list";
-                cardsList.style.display = "none";
-
-                msg.sources.forEach(src => {
-                    const card = document.createElement("div");
-                    card.className = "source-card-item";
-                    card.innerHTML = `
-                        <div class="source-info">
-                            <span class="source-file-badge"><i class="fa-regular fa-file-pdf"></i> ${src.source}</span>
-                            <span class="source-page-badge">Trang ${src.page}</span>
-                            <span class="source-snippet">${this.escapeHtml(src.preview)}</span>
-                        </div>
-                        <i class="fa-solid fa-arrow-up-right-from-square" style="color: var(--text-muted); font-size: 0.75rem"></i>
-                    `;
-                    card.addEventListener("click", () => this.openSourceModal(src));
-                    cardsList.appendChild(card);
-                });
-
-                toggleBtn.addEventListener("click", () => {
-                    const isOpen = cardsList.style.display === "flex";
-                    cardsList.style.display = isOpen ? "none" : "flex";
-                    toggleBtn.querySelector(".fa-chevron-down, .fa-chevron-up").className = isOpen ? "fa-solid fa-chevron-down" : "fa-solid fa-chevron-up";
-                });
-
-                sourcesContainer.appendChild(toggleBtn);
-                sourcesContainer.appendChild(cardsList);
-                bubbleDiv.appendChild(sourcesContainer);
-            }
+            // Sources display disabled per user request
         }
 
         wrapperDiv.appendChild(bubbleDiv);
