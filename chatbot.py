@@ -610,7 +610,7 @@ def query_knowledge_base(query, n_results=4):
     return matched_docs
 
 
-def call_gemini_text_rest(prompt, model_name, api_key=API_KEY, timeout=10):
+def call_gemini_text_rest(prompt, model_name, api_key=API_KEY, timeout=25):
     """Gọi trực tiếp Google Gemini REST API cho text với timeout 10s."""
     clean_model = model_name.replace("models/", "").strip()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{clean_model}:generateContent?key={api_key}"
@@ -709,7 +709,7 @@ CÁC NGUYÊN TẮC BẮT BUỘC KHI TRẢ LỜI:
 """
 
     for m_name in VISION_MODELS:
-        answer, err = call_gemini_text_rest(prompt, m_name, API_KEY, timeout=10)
+        answer, err = call_gemini_text_rest(prompt, m_name, API_KEY, timeout=25)
         if answer:
             try:
                 from app import clean_llm_response

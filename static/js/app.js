@@ -56,9 +56,10 @@ class PTITChatApp {
         this.sessions = [];
         this.settings = {
             apiKey: "",
-            model: "gemini-3.1-flash-lite",
-            topK: 4,
-            autoVoice: false
+            model: "gemini-3-flash-preview",
+            topK: 6,
+            autoVoice: false,
+            voiceURI: ""
         };
         this.currentCategory = "all";
         this.isProcessing = false;
@@ -75,6 +76,7 @@ class PTITChatApp {
         this.loadSessions();
         this.bindEvents();
         this.autoGrowTextarea();
+        this.initSpeechSynthesis();
         this.initSpeechRecognition();
         this.fetchKBStatus();
         this.renderCategorySuggestions();
@@ -132,6 +134,16 @@ class PTITChatApp {
         this.exportChatBtn = document.getElementById("exportChatBtn");
         this.clearCurrentChatBtn = document.getElementById("clearCurrentChatBtn");
 
+        // File Upload & Attachment Elements
+        this.fileUploadInput = document.getElementById("fileUploadInput");
+        this.uploadFileBtn = document.getElementById("uploadFileBtn");
+        this.attachmentPreview = document.getElementById("attachmentPreview");
+        this.attachmentFilename = document.getElementById("attachmentFilename");
+        this.attachmentFilesize = document.getElementById("attachmentFilesize");
+        this.attachmentIcon = document.getElementById("attachmentIcon");
+        this.removeAttachmentBtn = document.getElementById("removeAttachmentBtn");
+        this.attachedFile = null;
+
         // Modals
         this.kbModal = document.getElementById("kbModal");
         this.openKbModalBtn = document.getElementById("openKbModalBtn");
@@ -152,6 +164,8 @@ class PTITChatApp {
         this.topKInput = document.getElementById("topKInput");
         this.topKValue = document.getElementById("topKValue");
         this.autoVoiceToggle = document.getElementById("autoVoiceToggle");
+        this.voiceSelect = document.getElementById("voiceSelect");
+        this.testVoiceBtn = document.getElementById("testVoiceBtn");
 
         this.sourceModal = document.getElementById("sourceModal");
         this.sourceModalTitle = document.getElementById("sourceModalTitle");
@@ -191,6 +205,44 @@ class PTITChatApp {
             this.handleSubmit();
         });
 
+        // File Upload Listeners
+        if (this.uploadFileBtn && this.fileUploadInput) {
+            this.uploadFileBtn.addEventListener("click", () => this.fileUploadInput.click());
+            this.fileUploadInput.addEventListener("change", (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (file) this.setAttachedFile(file);
+            });
+        }
+
+        if (this.removeAttachmentBtn) {
+            this.removeAttachmentBtn.addEventListener("click", () => this.clearAttachedFile());
+        }
+
+        // Drag and Drop files onto chat area
+        const inputArea = document.querySelector(".chat-input-area");
+        if (inputArea) {
+            ["dragenter", "dragover"].forEach(evtName => {
+                inputArea.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    inputArea.classList.add("drag-over");
+                });
+            });
+            ["dragleave", "drop"].forEach(evtName => {
+                inputArea.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    inputArea.classList.remove("drag-over");
+                });
+            });
+            inputArea.addEventListener("drop", (e) => {
+                const dt = e.dataTransfer;
+                if (dt && dt.files && dt.files.length > 0) {
+                    this.setAttachedFile(dt.files[0]);
+                }
+            });
+        }
+
         // Quick prompt chips
         document.querySelectorAll(".quick-chip").forEach(chip => {
             chip.addEventListener("click", () => {
@@ -223,6 +275,12 @@ class PTITChatApp {
         if (this.closeSettingsModalBtn) this.closeSettingsModalBtn.addEventListener("click", () => this.settingsModal && this.settingsModal.classList.remove("active"));
         if (this.saveSettingsBtn) this.saveSettingsBtn.addEventListener("click", () => this.saveSettings());
         if (this.resetSettingsBtn) this.resetSettingsBtn.addEventListener("click", () => this.resetSettings());
+        if (this.testVoiceBtn) {
+            this.testVoiceBtn.addEventListener("click", () => {
+                const sampleText = "Xin chào bạn! Tôi là Trợ lý Ảo AI chính thức của Học viện Công nghệ Bưu chính Viễn thông PTIT.";
+                this.speakText(sampleText, null, this.voiceSelect ? this.voiceSelect.value : null);
+            });
+        }
 
         if (this.topKInput) {
             this.topKInput.addEventListener("input", () => {
@@ -254,11 +312,11 @@ class PTITChatApp {
 
     getModelDisplayLabel(modelId) {
         const labels = {
-            "gemini-3.5-flash-lite": "3.5 Flash-Lite (Khuyên dùng)",
-            "gemini-flash-lite-latest": "Flash Lite Latest (Nhanh)",
-            "gemini-3-flash-preview": "3 Flash Preview",
-            "gemini-3.1-flash-lite-preview": "3.1 Flash Lite Preview",
+            "gemini-3-flash-preview": "3 Flash Preview (Khuyên dùng • Siêu tốc)",
             "gemini-3.5-flash": "3.5 Flash (Cân bằng)",
+            "gemini-flash-lite-latest": "Flash Lite Latest (Nhanh)",
+            "gemini-3.5-flash-lite": "3.5 Flash-Lite",
+            "gemini-3.1-flash-lite-preview": "3.1 Flash Lite Preview",
             "gemini-3.8-flash": "3.8 Flash (Chất lượng cao)",
             "gemini-pro-latest": "Pro (Lý luận)"
         };
@@ -273,7 +331,7 @@ class PTITChatApp {
         const quickSelect = document.getElementById("quickModelSelect");
 
         this.updateQuickModelUI = (modelValue) => {
-            const currentModel = modelValue || this.settings.model || "gemini-3.5-flash-lite";
+            const currentModel = modelValue || this.settings.model || "gemini-3-flash-preview";
             if (label) {
                 label.textContent = this.getModelDisplayLabel(currentModel);
             }
@@ -399,18 +457,28 @@ class PTITChatApp {
             try {
                 this.settings = { ...this.settings, ...JSON.parse(savedSettings) };
                 const validModels = [
-                    "gemini-3.1-flash-lite",
-                    "gemini-3.5-flash-lite",
-                    "gemini-flash-lite-latest",
                     "gemini-3-flash-preview",
-                    "gemini-3.6-flash",
-                    "gemini-flash-latest",
                     "gemini-3.5-flash",
+                    "gemini-flash-lite-latest",
+                    "gemini-3.5-flash-lite",
+                    "gemini-3.1-flash-lite",
+                    "gemini-3.8-flash",
                     "gemini-3.7-flash"
                 ];
-                if (!this.settings.model || !validModels.includes(this.settings.model) || this.settings.model === "gemini-2.5-flash" || this.settings.model === "gemini-3.6-flash") {
-                    this.settings.model = "gemini-3.1-flash-lite";
+                // Tự động nâng cấp các model hay bị timeout trên Google server sang gemini-3-flash-preview
+                const slowOrTimeoutModels = [
+                    "gemini-3.5-flash-lite",
+                    "gemini-3.1-flash-lite",
+                    "gemini-2.5-flash",
+                    "gemini-3.6-flash",
+                    "gemini-3.1-flash-lite-preview"
+                ];
+                if (!this.settings.model || !validModels.includes(this.settings.model) || slowOrTimeoutModels.includes(this.settings.model)) {
+                    this.settings.model = "gemini-3-flash-preview";
                     localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
+                }
+                if (!this.settings.topK || this.settings.topK < 6) {
+                    this.settings.topK = 6;
                 }
             } catch (e) {
                 console.error("Lỗi đọc cài đặt:", e);
@@ -423,18 +491,23 @@ class PTITChatApp {
 
     openSettingsModal() {
         this.customApiKeyInput.value = this.settings.apiKey || "";
-        this.modelSelect.value = this.settings.model || "gemini-3.1-flash-lite";
-        this.topKInput.value = this.settings.topK || 4;
+        this.modelSelect.value = this.settings.model || "gemini-3-flash-preview";
+        this.topKInput.value = this.settings.topK || 6;
         this.topKValue.textContent = this.topKInput.value;
         this.autoVoiceToggle.checked = !!this.settings.autoVoice;
+        this.populateVoiceSelect();
+        if (this.voiceSelect && this.settings.voiceURI) {
+            this.voiceSelect.value = this.settings.voiceURI;
+        }
         this.settingsModal.classList.add("active");
     }
 
     saveSettings() {
         this.settings.apiKey = this.customApiKeyInput.value.trim();
         this.settings.model = this.modelSelect.value;
-        this.settings.topK = parseInt(this.topKInput.value, 10) || 4;
+        this.settings.topK = parseInt(this.topKInput.value, 10) || 6;
         this.settings.autoVoice = this.autoVoiceToggle.checked;
+        this.settings.voiceURI = this.voiceSelect ? this.voiceSelect.value : "";
 
         localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
         if (this.modelBadgeDisplay) {
@@ -450,19 +523,21 @@ class PTITChatApp {
     resetSettings() {
         this.settings = {
             apiKey: "",
-            model: "gemini-3.1-flash-lite",
-            topK: 4,
-            autoVoice: false
+            model: "gemini-3-flash-preview",
+            topK: 6,
+            autoVoice: false,
+            voiceURI: ""
         };
         this.customApiKeyInput.value = "";
-        this.modelSelect.value = "gemini-3.1-flash-lite";
-        this.topKInput.value = 4;
-        this.topKValue.textContent = "4";
+        this.modelSelect.value = "gemini-3-flash-preview";
+        this.topKInput.value = 6;
+        this.topKValue.textContent = "6";
         this.autoVoiceToggle.checked = false;
+        if (this.voiceSelect) this.voiceSelect.value = "";
         localStorage.removeItem("ptit_chat_settings");
-        this.modelBadgeDisplay.textContent = "gemini-3.1-flash-lite";
+        this.modelBadgeDisplay.textContent = "gemini-3-flash-preview";
         if (this.updateQuickModelUI) {
-            this.updateQuickModelUI("gemini-3.1-flash-lite");
+            this.updateQuickModelUI("gemini-3-flash-preview");
         }
         this.showToast("Đã khôi phục cài đặt mặc định.", "info");
     }
@@ -625,7 +700,16 @@ class PTITChatApp {
         bubbleDiv.className = "msg-bubble";
 
         if (msg.role === "user") {
-            bubbleDiv.textContent = msg.content;
+            if (msg.attachment) {
+                const attachBadge = document.createElement("div");
+                attachBadge.className = "msg-attachment-badge";
+                attachBadge.innerHTML = `<i class="fa-solid fa-paperclip"></i> <span>${this.escapeHtml(msg.attachment.name)}</span> <small>(${msg.attachment.size || ""})</small>`;
+                bubbleDiv.appendChild(attachBadge);
+            }
+            const textEl = document.createElement("div");
+            textEl.className = "user-text-content";
+            textEl.textContent = msg.content;
+            bubbleDiv.appendChild(textEl);
         } else {
             // Render Bot Markdown with LaTeX cleanup
             let textToRender = msg.content || "";
@@ -748,15 +832,75 @@ class PTITChatApp {
         }, 50);
     }
 
+    // ATTACHMENT MANAGEMENT
+    setAttachedFile(file) {
+        if (!file) return;
+        const validExtensions = [".pdf", ".docx", ".txt", ".md"];
+        const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+        if (!validExtensions.includes(ext)) {
+            this.showToast("Chỉ hỗ trợ định dạng tệp: .pdf, .docx, .txt, .md", "warning");
+            if (this.fileUploadInput) this.fileUploadInput.value = "";
+            return;
+        }
+
+        if (file.size > 35 * 1024 * 1024) {
+            this.showToast("Kích thước file không được vượt quá 35MB", "warning");
+            if (this.fileUploadInput) this.fileUploadInput.value = "";
+            return;
+        }
+
+        this.attachedFile = file;
+        if (this.attachmentFilename) this.attachmentFilename.textContent = file.name;
+        if (this.attachmentFilesize) {
+            this.attachmentFilesize.textContent = `${this.formatFileSize(file.size)} • Tự động lưu data/ & chunking`;
+        }
+
+        if (this.attachmentIcon) {
+            if (ext === ".pdf") this.attachmentIcon.className = "fa-solid fa-file-pdf attachment-icon";
+            else if (ext === ".docx") this.attachmentIcon.className = "fa-solid fa-file-word attachment-icon";
+            else this.attachmentIcon.className = "fa-solid fa-file-lines attachment-icon";
+        }
+
+        if (this.attachmentPreview) {
+            this.attachmentPreview.classList.remove("hidden");
+        }
+
+        if (this.userInput) {
+            this.userInput.placeholder = "Nhập câu hỏi về tài liệu đính kèm hoặc bấm Gửi để tóm tắt...";
+            this.userInput.focus();
+        }
+    }
+
+    clearAttachedFile() {
+        this.attachedFile = null;
+        if (this.fileUploadInput) this.fileUploadInput.value = "";
+        if (this.attachmentPreview) this.attachmentPreview.classList.add("hidden");
+        if (this.userInput) {
+            this.userInput.placeholder = "Nhập câu hỏi về học phí, môn học, quy chế PTIT...";
+        }
+    }
+
+    formatFileSize(bytes) {
+        if (!bytes || bytes === 0) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+    }
+
     // SUBMIT QUESTION
     async handleSubmit() {
         const text = this.userInput.value.trim();
-        if (!text || this.isProcessing) return;
+        const fileToSend = this.attachedFile;
+        if ((!text && !fileToSend) || this.isProcessing) return;
 
         // Reset Textarea
         this.userInput.value = "";
         this.userInput.style.height = "38px";
         if (this.chatForm) this.chatForm.classList.remove("multiline");
+
+        const displayQuestion = text || (fileToSend ? `Tóm tắt nội dung tài liệu: ${fileToSend.name}` : "");
+        const actualQuestion = text || (fileToSend ? `Hãy tóm tắt chi tiết các nội dung chính và thông tin quan trọng nhất trong tài liệu '${fileToSend.name}'.` : "");
 
         let currentSession = this.sessions.find(s => s.id === this.currentSessionId);
         if (!currentSession) {
@@ -766,41 +910,74 @@ class PTITChatApp {
 
         // Set title on first message
         if (currentSession.messages.length === 0) {
-            currentSession.title = text.length > 32 ? text.substring(0, 32) + "..." : text;
+            const titleSource = fileToSend ? `Tài liệu: ${fileToSend.name}` : text;
+            currentSession.title = titleSource.length > 32 ? titleSource.substring(0, 32) + "..." : titleSource;
             this.currentChatTitle.textContent = currentSession.title;
         }
 
         // Add User Message
-        const userMsg = { role: "user", content: text, timestamp: new Date().toISOString() };
+        const userMsg = {
+            role: "user",
+            content: displayQuestion,
+            attachment: fileToSend ? {
+                name: fileToSend.name,
+                size: this.formatFileSize(fileToSend.size)
+            } : null,
+            timestamp: new Date().toISOString()
+        };
         currentSession.messages.push(userMsg);
         this.saveSessions();
         this.appendMessageToDOM(userMsg, true);
+
+        // Clear attachment UI now that message is queued
+        this.clearAttachedFile();
 
         // Show Typing Indicator
         this.isProcessing = true;
         this.sendBtn.disabled = true;
         this.typingIndicator.classList.remove("hidden");
-        this.typingLabel.textContent = "Đang tra cứu Vector DB & tạo câu trả lời...";
+        if (fileToSend) {
+            this.typingLabel.textContent = "Đang lưu tài liệu vào thư mục data, xử lý & băm nhỏ dữ liệu (chunking)...";
+        } else {
+            this.typingLabel.textContent = "Đang tra cứu Vector DB & tạo câu trả lời...";
+        }
         this.scrollToBottom();
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000);
+        const timeoutId = setTimeout(() => controller.abort(), fileToSend ? 120000 : 45000);
 
         try {
-            const payload = {
-                question: text,
-                api_key: this.settings.apiKey,
-                model: this.settings.model,
-                top_k: this.settings.topK,
-                history: currentSession.messages.slice(-6)
-            };
+            let response;
+            if (fileToSend) {
+                const formData = new FormData();
+                formData.append("file", fileToSend);
+                formData.append("question", actualQuestion);
+                formData.append("api_key", this.settings.apiKey || "");
+                formData.append("model", this.settings.model || "");
+                formData.append("top_k", this.settings.topK || 3);
+                formData.append("history", JSON.stringify(currentSession.messages.slice(-6)));
 
-            const response = await fetch("/api/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-                signal: controller.signal
-            });
+                response = await fetch("/api/chat", {
+                    method: "POST",
+                    body: formData,
+                    signal: controller.signal
+                });
+            } else {
+                const payload = {
+                    question: actualQuestion,
+                    api_key: this.settings.apiKey,
+                    model: this.settings.model,
+                    top_k: this.settings.topK,
+                    history: currentSession.messages.slice(-6)
+                };
+
+                response = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
+                });
+            }
             clearTimeout(timeoutId);
 
             const data = await response.json();
@@ -826,12 +1003,19 @@ class PTITChatApp {
                 content: data.answer || "Không nhận được phản hồi từ hệ thống.",
                 sources: data.sources || [],
                 model_used: data.model_used,
+                file_info: data.file_info || null,
                 timestamp: new Date().toISOString()
             };
 
             currentSession.messages.push(botMsg);
             this.saveSessions();
             this.appendMessageToDOM(botMsg, true);
+
+            // Update KB stats in sidebar if file was uploaded
+            if (fileToSend) {
+                this.fetchKBStatus();
+                this.showToast(`Đã lưu "${fileToSend.name}" vào data/ và hoàn tất băm chunks!`, "success");
+            }
 
             // Auto-voice if enabled
             if (this.settings.autoVoice) {
@@ -847,7 +1031,7 @@ class PTITChatApp {
 
             let errorText = `❌ **Lỗi kết nối máy chủ:** Không thể liên lạc với backend Flask. Vui lòng kiểm tra lại terminal xem lệnh 'python app.py' có đang chạy không.`;
             if (err.name === 'AbortError') {
-                errorText = `⏱️ **Hết thời gian chờ (Timeout):** Máy chủ phản hồi quá lâu. Bạn hãy thử lại hoặc nhập Gemini API Key cá nhân trong phần Cài đặt (⚙️) nhé.`;
+                errorText = `⏱️ **Hết thời gian chờ (Timeout):** Quá trình xử lý tài liệu hoặc sinh câu trả lời quá lâu. Bạn hãy thử lại hoặc nhập Gemini API Key cá nhân trong phần Cài đặt (⚙️) nhé.`;
             }
 
             const netErrorMsg = {
@@ -913,16 +1097,205 @@ class PTITChatApp {
         }
     }
 
-    // SPEECH SYNTHESIS (TTS)
+    // SPEECH SYNTHESIS (TTS) - TỐI ƯU GIỌNG ĐỌC TIẾNG VIỆT TỰ NHIÊN
+    initSpeechSynthesis() {
+        this.cachedVoices = [];
+        this.speechQueue = [];
+        this.currentSpeechBtn = null;
+
+        if ('speechSynthesis' in window) {
+            this.cachedVoices = window.speechSynthesis.getVoices();
+            window.speechSynthesis.onvoiceschanged = () => {
+                this.cachedVoices = window.speechSynthesis.getVoices();
+                this.populateVoiceSelect();
+            };
+        }
+    }
+
+    populateVoiceSelect() {
+        if (!this.voiceSelect || !('speechSynthesis' in window)) return;
+        let voices = window.speechSynthesis.getVoices();
+        if (!voices || voices.length === 0) {
+            voices = this.cachedVoices || [];
+        }
+        if (!voices || voices.length === 0) return;
+
+        const currentVal = this.voiceSelect.value || this.settings.voiceURI || "";
+        this.voiceSelect.innerHTML = '<option value="">-- Tự động chọn giọng tiếng Việt tốt nhất --</option>';
+
+        const viVoices = [];
+        const otherVoices = [];
+        voices.forEach(v => {
+            const l = (v.lang || "").toLowerCase();
+            const n = (v.name || "").toLowerCase();
+            if (l.includes("vi") || n.includes("vietnam") || n.includes("tiếng việt")) {
+                viVoices.push(v);
+            } else {
+                otherVoices.push(v);
+            }
+        });
+
+        viVoices.sort((a, b) => {
+            const aN = (a.name || "").toLowerCase();
+            const bN = (b.name || "").toLowerCase();
+            const aPref = (aN.includes("natural") || aN.includes("google") || aN.includes("hoaimy") || aN.includes("namminh")) ? 1 : 0;
+            const bPref = (bN.includes("natural") || bN.includes("google") || bN.includes("hoaimy") || bN.includes("namminh")) ? 1 : 0;
+            return bPref - aPref;
+        });
+
+        if (viVoices.length > 0) {
+            const viGroup = document.createElement("optgroup");
+            viGroup.label = "🇻🇳 Giọng Đọc Tiếng Việt (Khuyên dùng)";
+            viVoices.forEach(v => {
+                const opt = document.createElement("option");
+                opt.value = v.voiceURI || v.name;
+                let badge = "";
+                if (v.name.includes("Google")) badge = " [Google Chrome]";
+                else if (v.name.includes("Natural") || v.name.includes("Online")) badge = " [Microsoft Natural]";
+                opt.textContent = `${v.name}${badge}`;
+                viGroup.appendChild(opt);
+            });
+            this.voiceSelect.appendChild(viGroup);
+        }
+
+        if (otherVoices.length > 0) {
+            const otherGroup = document.createElement("optgroup");
+            otherGroup.label = "🌐 Các giọng đọc khác trong máy";
+            otherVoices.slice(0, 15).forEach(v => {
+                const opt = document.createElement("option");
+                opt.value = v.voiceURI || v.name;
+                opt.textContent = `${v.name} (${v.lang})`;
+                otherGroup.appendChild(opt);
+            });
+            this.voiceSelect.appendChild(otherGroup);
+        }
+
+        if (currentVal) {
+            this.voiceSelect.value = currentVal;
+        }
+    }
+
+    getBestVietnameseVoice(forcedVoiceURI = null) {
+        if (!('speechSynthesis' in window)) return null;
+        let voices = window.speechSynthesis.getVoices();
+        if (!voices || voices.length === 0) {
+            voices = this.cachedVoices || [];
+        }
+        if (!voices || voices.length === 0) return null;
+
+        const targetURI = forcedVoiceURI || this.settings.voiceURI;
+        if (targetURI) {
+            const matched = voices.find(v => (v.voiceURI === targetURI || v.name === targetURI));
+            if (matched) return matched;
+        }
+
+        // 1. Ưu tiên giọng cao cấp Natural / Neural của Microsoft Edge (rất tự nhiên, như người thật đọc)
+        let best = voices.find(v => {
+            const l = (v.lang || "").toLowerCase();
+            const n = (v.name || "").toLowerCase();
+            return (l.includes("vi") || n.includes("vietnam")) && 
+                   (n.includes("natural") || n.includes("online") || n.includes("hoaimy") || n.includes("namminh"));
+        });
+
+        // 2. Ưu tiên giọng Google tiếng Việt trên Chrome / Android
+        if (!best) {
+            best = voices.find(v => {
+                const l = (v.lang || "").toLowerCase();
+                const n = (v.name || "").toLowerCase();
+                return (l.includes("vi") || n.includes("vietnam")) && n.includes("google");
+            });
+        }
+
+        // 3. Ưu tiên bất kỳ giọng tiếng Việt chuẩn vi-VN nào khác
+        if (!best) {
+            best = voices.find(v => {
+                const l = (v.lang || "").toLowerCase().replace("_", "-");
+                const n = (v.name || "").toLowerCase();
+                return l.startsWith("vi") || n.includes("vietnamese") || n.includes("tiếng việt") || n.includes("an - vietnamese");
+            });
+        }
+
+        return best;
+    }
+
+    cleanTextForVietnameseTTS(rawText) {
+        if (!rawText) return "";
+
+        let t = rawText;
+
+        // 1. Chuyển đổi các bảng Markdown thành câu văn tự nhiên
+        t = t.replace(/\|[\s-:]+\|[\s-:]+\|/g, ""); // Dòng kẻ bảng |---|---|
+        t = t.replace(/\|\s*/g, ", "); // Dấu cột | thành dấu phẩy nghỉ nhịp
+
+        // 2. Chuyển đổi từ viết tắt học thuật và chuyên ngành sang từ ngữ nói tự nhiên
+        const acronyms = [
+            [/\bThS\./gi, "Thạc sĩ "],
+            [/\bPGS\.TS\./gi, "Phó giáo sư Tiến sĩ "],
+            [/\bPGS\./gi, "Phó giáo sư "],
+            [/\bTS\./gi, "Tiến sĩ "],
+            [/\bGV\s*:\s*/gi, "Giảng viên: "],
+            [/\bGV\b/gi, "Giảng viên"],
+            [/\bMSc\b/gi, "Thạc sĩ"],
+            [/\bCNPM\b/gi, "Công nghệ phần mềm"],
+            [/\bCNTT1\b/gi, "Công nghệ thông tin một"],
+            [/\bCNTT\b/gi, "Công nghệ thông tin"],
+            [/\bATTT\b/gi, "An toàn thông tin"],
+            [/\bKTX\b/gi, "Ký túc xá"],
+            [/\bQLDAPM\b/gi, "Quản lý dự án phần mềm"],
+            [/\bQLDA\b/gi, "Quản lý dự án"],
+            [/\bPTIT\b/gi, "Học viện Bưu chính Viễn thông"],
+            [/\bSlink\b/gi, "Ét link"],
+            [/\bVNĐ\b/gi, "đồng"],
+            [/\bđ\/tín chỉ\b/gi, "đồng trên một tín chỉ"],
+            [/\bđ\/TC\b/gi, "đồng trên một tín chỉ"],
+            [/\bMSV\b/gi, "Mã sinh viên"],
+            [/\bSV\b/gi, "Sinh viên"],
+            [/\bHK(\d)\b/gi, "Học kỳ $1"],
+            [/\b(\d+)\s*đ\b/gi, "$1 đồng"],
+            [/>=/g, " lớn hơn hoặc bằng "],
+            [/<=/g, " nhỏ hơn hoặc bằng "],
+            [/!=/g, " khác "],
+            [/==/g, " bằng "]
+        ];
+
+        for (const [pattern, replacement] of acronyms) {
+            t = t.replace(pattern, replacement);
+        }
+
+        // 3. Xử lý đường dẫn web và email
+        t = t.replace(/https?:\/\/\S+/gi, "");
+        t = t.replace(/[\w.-]+@ptit\.edu\.vn/gi, "địa chỉ email trường");
+        t = t.replace(/[\w.-]+@[\w.-]+\.\w+/gi, "địa chỉ email");
+
+        // 4. Bỏ các ký tự định dạng Markdown
+        t = t.replace(/`{1,3}[^`]*`{1,3}/g, ""); // Khối code
+        t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1"); // Link markdown: [Tên](url) -> Tên
+        t = t.replace(/[#*_~`>]/g, " "); // Ký tự định dạng in đậm, nghiêng, tiêu đề
+        t = t.replace(/^[\s•\-\*]+\s*/gm, ""); // Ký hiệu gạch đầu dòng bullet
+        t = t.replace(/---/g, " ");
+
+        // 5. Chuẩn hóa khoảng trắng và dấu câu
+        t = t.replace(/([,.:;?!])\1+/g, "$1");
+        t = t.replace(/\s+/g, " ").trim();
+
+        return t;
+    }
+
     toggleSpeech(text, btnElement) {
         if (!('speechSynthesis' in window)) {
             this.showToast("Trình duyệt không hỗ trợ đọc giọng nói Text-to-Speech.", "info");
             return;
         }
 
-        if (window.speechSynthesis.speaking) {
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
             window.speechSynthesis.cancel();
-            document.querySelectorAll(".msg-action-btn.active").forEach(b => b.classList.remove("active"));
+            this.speechQueue = [];
+            document.querySelectorAll(".msg-action-btn.active").forEach(b => {
+                b.classList.remove("active");
+                const label = b.querySelector("span");
+                if (label) label.textContent = "Đọc";
+            });
+
             if (this.currentUtteranceText === text) {
                 this.currentUtteranceText = null;
                 return;
@@ -932,49 +1305,90 @@ class PTITChatApp {
         this.speakText(text, btnElement);
     }
 
-    speakText(text, btnElement = null) {
+    speakText(text, btnElement = null, forcedVoiceURI = null) {
         if (!('speechSynthesis' in window)) return;
         window.speechSynthesis.cancel();
+        this.speechQueue = [];
 
-        // Strip Markdown tags for smooth voice reading
-        const plainText = text
-            .replace(/[#*_`~\[\]\(\)>|]/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
+        const cleanText = this.cleanTextForVietnameseTTS(text);
+        if (!cleanText) return;
 
-        const utterance = new SpeechSynthesisUtterance(plainText);
-        utterance.lang = "vi-VN";
-        utterance.rate = 1.0;
+        const viVoice = this.getBestVietnameseVoice(forcedVoiceURI);
+        if (!viVoice) {
+            this.showToast("Mẹo: Để nghe giọng đọc tiếng Việt mượt mà và tự nhiên nhất, bạn hãy mở trên Microsoft Edge (giọng Hoài My) hoặc Google Chrome nhé!", "info");
+        }
 
-        // Try to pick a Vietnamese voice
-        const voices = window.speechSynthesis.getVoices();
-        const viVoice = voices.find(v => v.lang.includes("vi") || v.name.includes("Vietnamese"));
-        if (viVoice) utterance.voice = viVoice;
+        // Chia văn bản thành các câu ngắn (< 150 ký tự) theo dấu chấm, chấm phẩy hoặc xuống dòng
+        // Tránh tình trạng Chrome SpeechSynthesis bị dừng giữa chừng sau 15 giây
+        const rawSentences = cleanText.split(/(?<=[.!?;:\n])\s+/);
+        const sentences = [];
+        for (const s of rawSentences) {
+            const trimmed = s.trim();
+            if (trimmed) {
+                if (trimmed.length > 180) {
+                    const subParts = trimmed.split(/,\s+/);
+                    for (const sp of subParts) {
+                        if (sp.trim()) sentences.push(sp.trim());
+                    }
+                } else {
+                    sentences.push(trimmed);
+                }
+            }
+        }
+
+        if (sentences.length === 0) return;
+
+        this.currentSpeechBtn = btnElement;
+        this.currentUtteranceText = text;
 
         if (btnElement) {
             btnElement.classList.add("active");
-            btnElement.querySelector("span").textContent = "Dừng";
+            const label = btnElement.querySelector("span");
+            if (label) label.textContent = "Dừng";
         }
 
-        this.currentUtteranceText = text;
-
-        utterance.onend = () => {
-            if (btnElement) {
-                btnElement.classList.remove("active");
-                btnElement.querySelector("span").textContent = "Đọc";
+        const resetBtn = () => {
+            if (this.currentSpeechBtn) {
+                this.currentSpeechBtn.classList.remove("active");
+                const label = this.currentSpeechBtn.querySelector("span");
+                if (label) label.textContent = "Đọc";
             }
             this.currentUtteranceText = null;
+            this.speechQueue = [];
         };
 
-        utterance.onerror = () => {
-            if (btnElement) {
-                btnElement.classList.remove("active");
-                btnElement.querySelector("span").textContent = "Đọc";
+        let sentenceIndex = 0;
+        const speakNext = () => {
+            if (sentenceIndex >= sentences.length) {
+                resetBtn();
+                return;
             }
-            this.currentUtteranceText = null;
+
+            const currentSentence = sentences[sentenceIndex++];
+            const utterance = new SpeechSynthesisUtterance(currentSentence);
+            utterance.lang = viVoice ? (viVoice.lang || "vi-VN") : "vi-VN";
+            utterance.rate = 0.96; // Tốc độ tự nhiên, rõ chữ
+            utterance.pitch = 1.0;
+
+            if (viVoice) {
+                utterance.voice = viVoice;
+            }
+
+            utterance.onend = () => {
+                speakNext();
+            };
+
+            utterance.onerror = (e) => {
+                if (e.error !== "canceled" && e.error !== "interrupted") {
+                    console.warn("Lỗi phát âm SpeechSynthesis:", e);
+                }
+                resetBtn();
+            };
+
+            window.speechSynthesis.speak(utterance);
         };
 
-        window.speechSynthesis.speak(utterance);
+        speakNext();
     }
 
     // SPEECH RECOGNITION (STT)

@@ -6,7 +6,7 @@ Tiếp nhận hồ sơ xét miễn học miễn thi, chuyển đổi điểm, x�
 đạt chuẩn đầu ra tiếng Anh cho sinh viên Đại học chính quy
 có chứng chỉ tiếng Anh quốc tế theo quy định, Học kỳ 1 năm
 học 2026-2027 (đợt tháng 7/2026)
-Thông báo
+Thông báo
 01/07/2026
 quangnn
 – Căn cứ Quyết định số 585/QĐ-HV ngày 04/09/2015, Quyết định số 734/QĐ-HV ngày

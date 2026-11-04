@@ -272,9 +272,9 @@ Nay em làm đơn này đề nghị Trung tâm xem xét lại điểm bài thi c
 Kính mong Trung tâm xem xét giải quyết. 
 Xin trân trọng cảm ơn! 
 
-                                                Hà Nội, Ngày…… tháng …… năm 20… 
+                                                Hà Nội, Ngày…… tháng …… năm 20… 
 
-                                                          NGƯỜI VIẾT ĐƠN 
+                                                          NGƯỜI VIẾT ĐƠN 
                                                        (Ký và ghi rõ họ tên)
 
 ---
@@ -305,7 +305,7 @@ Em làm đơn này kính đề nghị quý Phòng cấp cho em (giấy tờ đ�
 Em xin hứa chấp hành nghiêm túc nội quy, quy định của Học viện. 
 Em xin chân thành cảm ơn! 
 
-                                                Hà Nội, Ngày…… tháng …… năm 20…
+                                                Hà Nội, Ngày…… tháng …… năm 20…
 
                                                           NGƯỜI LÀM ĐƠN 
                                                        (Ký và ghi rõ họ tên)

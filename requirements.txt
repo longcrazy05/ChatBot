@@ -1,0 +1,12 @@
+flask
+python-dotenv
+requests
+chromadb
+google-genai
+langchain-text-splitters
+langchain-google-genai
+pymupdf
+pillow
+opencv-python
+numpy
+

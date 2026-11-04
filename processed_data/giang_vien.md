@@ -252,7 +252,7 @@ Hà Nội, ngày 31 tháng 8 năm 2022
 | 178 | Hoàng Thị Lan Hương | 1972 | Nữ | Giảng viên chính | Thạc sĩ | Công nghệ kỹ thuật điện, điện tử |
 | 179 | Hoàng Thị Thu | 1994 | Nữ | Giảng viên | Thạc sĩ | Công nghệ thông tin |
 | 180 | Hoàng Trọng Minh | 1970 | Nam | Giảng viên chính | Tiến sĩ | Kỹ thuật điện tử - viễn thông |
-| 181 | Hoàng Ứng Huyền | 1955 | Nam | Giảng viên | Tiến sĩ | Kỹ thuật điện tử - viễn thông |
+| 181 | Hoàng Ứng Huyền | 1955 | Nam | Giảng viên | Tiến sĩ | Kỹ thuật điện tử - viễn thông |
 | 182 | Hoàng Xuân Dậu | 1969 | Nam | Giảng viên chính | Phó giáo sư - Tiến sĩ | An toàn thông tin |
 | 183 | Hoàng Xuân Sơn | 1978 | Nam | Giảng viên | Thạc sĩ | Công nghệ thông tin |
 | 184 | Huỳnh Thanh Tâm | 1988 | Nam | Giảng viên | Thạc sĩ | An toàn thông tin |
