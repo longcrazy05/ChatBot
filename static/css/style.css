@@ -2084,14 +2084,13 @@ select option:hover,
    ============================================================================== */
 .attachment-preview-bar {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-left: 3px solid var(--primary);
     border-radius: var(--radius-md);
-    padding: 8px 14px;
-    gap: 12px;
+    padding: 8px 12px;
+    gap: 8px;
     box-shadow: var(--shadow-sm);
     animation: fadeIn 0.2s ease-in-out;
 }
@@ -2100,27 +2099,48 @@ select option:hover,
     display: none !important;
 }
 
-.attachment-file-info {
+.attachment-preview-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    overflow: hidden;
+    justify-content: space-between;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--text-muted);
 }
 
-.attachment-icon {
-    font-size: 1.4rem;
+.attachment-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    max-width: 260px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.attachment-chip .attachment-icon {
+    font-size: 1.1rem;
     color: var(--primary);
     flex-shrink: 0;
 }
 
-.attachment-details {
+.attachment-chip .attachment-details {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-width: 0;
 }
 
-.attachment-filename {
-    font-size: 0.88rem;
+.attachment-chip .attachment-filename {
+    font-size: 0.82rem;
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
@@ -2128,14 +2148,14 @@ select option:hover,
     text-overflow: ellipsis;
 }
 
-.attachment-meta {
-    font-size: 0.74rem;
+.attachment-chip .attachment-meta {
+    font-size: 0.7rem;
     color: var(--text-muted);
 }
 
-.attachment-remove-btn {
-    width: 28px;
-    height: 28px;
+.attachment-chip .attachment-chip-remove {
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: transparent;
     border: none;
@@ -2144,16 +2164,38 @@ select option:hover,
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.9rem;
+    font-size: 0.75rem;
     transition: all var(--transition-fast);
+    flex-shrink: 0;
 }
 
-.attachment-remove-btn:hover {
-    background: rgba(239, 68, 68, 0.15);
+.attachment-chip .attachment-chip-remove:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.attachment-clear-all-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    cursor: pointer;
+    text-decoration: underline;
+    transition: color var(--transition-fast);
+}
+
+.attachment-clear-all-btn:hover {
     color: #ef4444;
 }
 
 /* User chat bubble with attachment badge */
+.msg-attachments-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
 .msg-attachment-badge {
     display: inline-flex;
     align-items: center;

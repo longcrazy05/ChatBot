@@ -855,8 +855,10 @@ def get_status():
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    uploaded_file = request.files.get("file")
-    if uploaded_file or (request.content_type and "multipart/form-data" in request.content_type):
+    uploaded_files = [f for f in request.files.getlist("files") + request.files.getlist("file") if f and f.filename]
+    uploaded_files = uploaded_files[:3]
+
+    if uploaded_files or (request.content_type and "multipart/form-data" in request.content_type):
         question = (request.form.get("question") or request.form.get("message") or "").strip()
         custom_api_key = (request.form.get("api_key") or request.form.get("custom_api_key") or "").strip()
         preferred_model = (request.form.get("model") or request.form.get("preferred_model") or "").strip()
@@ -875,61 +877,61 @@ def chat():
         custom_api_key = (data.get("api_key") or data.get("custom_api_key") or "").strip()
         preferred_model = (data.get("model") or data.get("preferred_model") or "").strip()
         top_k = int(data.get("top_k") or 3)
-        uploaded_file = None
+        uploaded_files = []
 
-    if not question and not uploaded_file:
+    if not question and not uploaded_files:
         return jsonify({"error": "Vui lòng nhập câu hỏi hoặc đính kèm tài liệu."}), 400
 
     sources = []
-    file_info = None
+    files_info = []
 
-    # 1. Xử lý nếu có tài liệu đính kèm
-    if uploaded_file and uploaded_file.filename:
-        try:
-            file_info = process_and_chunk_uploaded_file(uploaded_file, custom_api_key=custom_api_key)
-            sources.append(file_info["filename"])
-            print(f"[*] Da upload va chunking tai lieu: {file_info['filename']} ({file_info['chunks_count']} chunks)")
+    # 1. Xử lý đồng thời các tài liệu đính kèm (hỗ trợ tối đa 3 file)
+    if uploaded_files:
+        for uf in uploaded_files:
+            try:
+                fi = process_and_chunk_uploaded_file(uf, custom_api_key=custom_api_key)
+                files_info.append(fi)
+                sources.append(fi["filename"])
+                print(f"[*] Đã upload và chunking tài liệu: {fi['filename']} ({fi['chunks_count']} chunks)")
+            except Exception as e:
+                print(f"[!] Lỗi khi xử lý file upload {uf.filename}: {e}")
 
-            if not question:
-                question = f"Hãy tóm tắt chi tiết các nội dung chính và thông tin quan trọng nhất trong tài liệu '{file_info['filename']}'."
-
-        except Exception as e:
-            print(f"[!] Loi khi xu ly file upload: {e}")
-            return jsonify({"error": f"Lỗi khi xử lý tài liệu tải lên: {str(e)}"}), 500
+        if not question and files_info:
+            names_summary = ", ".join(f"'{fi['filename']}'" for fi in files_info)
+            question = f"Hãy tóm tắt chi tiết các nội dung chính và thông tin quan trọng nhất trong các tài liệu: {names_summary}."
 
     # 2. Truy vấn tri thức từ hệ thống
     kb_docs = smart_query_knowledge_base(question, n_results=top_k, custom_api_key=custom_api_key)
 
     context_parts = []
 
-    # 3. Đưa ngữ cảnh từ file vừa tải lên (ưu tiên cao nhất)
-    if file_info and file_info.get("chunks"):
-        context_parts.append(f"=== TÀI LIỆU VỪA TẢI LÊN: {file_info['filename']} (Đã lưu tại data/ và băm thành {file_info['chunks_count']} chunks) ===")
-        all_file_chunks = file_info["chunks"]
+    # 3. Đưa ngữ cảnh từ các file vừa tải lên (ưu tiên cao nhất)
+    for fi in files_info:
+        chunks = fi.get("chunks", [])
+        if chunks:
+            context_parts.append(f"=== TÀI LIỆU VỪA TẢI LÊN: {fi['filename']} (Đã lưu tại data/ và băm thành {fi['chunks_count']} chunks) ===")
+            if len(chunks) <= 15:
+                for c in chunks:
+                    context_parts.append(c["document"])
+            else:
+                q_clean = clean_and_normalize_text(question).lower()
+                q_words = [w for w in re.findall(r"\w+", q_clean) if len(w) > 1]
+                def chunk_score(c):
+                    text_lower = clean_and_normalize_text(c["document"]).lower()
+                    return sum(text_lower.count(w) for w in q_words)
 
-        if len(all_file_chunks) <= 25:
-            for c in all_file_chunks:
-                context_parts.append(c["document"])
-        else:
-            # Chọn các chunk phù hợp nhất với câu hỏi kết hợp giữ các trang đầu
-            q_clean = clean_and_normalize_text(question).lower()
-            q_words = [w for w in re.findall(r"\w+", q_clean) if len(w) > 1]
-            def chunk_score(c):
-                text_lower = clean_and_normalize_text(c["document"]).lower()
-                return sum(text_lower.count(w) for w in q_words)
-
-            sorted_chunks = sorted(all_file_chunks, key=chunk_score, reverse=True)
-            chosen = []
-            for c in all_file_chunks[:2]:
-                if c not in chosen:
-                    chosen.append(c)
-            for c in sorted_chunks:
-                if c not in chosen:
-                    chosen.append(c)
-                if len(chosen) >= 16:
-                    break
-            for c in chosen:
-                context_parts.append(c["document"])
+                sorted_chunks = sorted(chunks, key=chunk_score, reverse=True)
+                chosen = []
+                for c in chunks[:2]:
+                    if c not in chosen:
+                        chosen.append(c)
+                for c in sorted_chunks:
+                    if c not in chosen:
+                        chosen.append(c)
+                    if len(chosen) >= 12:
+                        break
+                for c in chosen:
+                    context_parts.append(c["document"])
 
     # 4. Thêm tri thức nền từ kho tài liệu PTIT
     if kb_docs:
@@ -950,7 +952,10 @@ def chat():
 
     if not answer:
         print(f"[!] LLM không phản hồi ({error_msg}), chuyển sang chế độ dự phòng an toàn...")
-        fallback_docs = (file_info.get("chunks", []) if file_info else []) + kb_docs
+        fallback_docs = []
+        for fi in files_info:
+            fallback_docs.extend(fi.get("chunks", []))
+        fallback_docs.extend(kb_docs)
         answer = safe_fallback_answer(question, fallback_docs)
         model_used = "PTIT Safe Engine (Dự phòng)"
 
@@ -960,29 +965,41 @@ def chat():
         "model_used": model_used,
         "sources": sources
     }
-    if file_info:
-        response_payload["file_info"] = {
-            "filename": file_info["filename"],
-            "chunks_count": file_info["chunks_count"],
-            "pages": file_info["total_pages"]
-        }
+    if files_info:
+        response_payload["files_info"] = [
+            {
+                "filename": fi["filename"],
+                "chunks_count": fi["chunks_count"],
+                "pages": fi["total_pages"]
+            }
+            for fi in files_info
+        ]
+        response_payload["file_info"] = response_payload["files_info"][0]
+
     return jsonify(response_payload)
 
 
 @app.route("/api/upload", methods=["POST"])
 def upload_file_endpoint():
-    uploaded_file = request.files.get("file")
-    if not uploaded_file or not uploaded_file.filename:
-        return jsonify({"error": "Vui lòng chọn file tải lên."}), 400
+    uploaded_files = [f for f in request.files.getlist("files") + request.files.getlist("file") if f and f.filename]
+    if not uploaded_files:
+        return jsonify({"error": "Vui lòng chọn ít nhất 1 file tải lên."}), 400
     try:
         custom_api_key = (request.form.get("api_key") or "").strip()
-        result = process_and_chunk_uploaded_file(uploaded_file, custom_api_key=custom_api_key)
+        results = []
+        for uf in uploaded_files[:3]:
+            res = process_and_chunk_uploaded_file(uf, custom_api_key=custom_api_key)
+            results.append({
+                "filename": res["filename"],
+                "chunks_count": res["chunks_count"],
+                "pages": res["total_pages"]
+            })
         return jsonify({
             "status": "success",
-            "message": f"Đã lưu vào data/ và băm thành {result['chunks_count']} chunks.",
-            "filename": result["filename"],
-            "chunks_count": result["chunks_count"],
-            "pages": result["total_pages"]
+            "message": f"Đã lưu và băm {len(results)} tài liệu vào hệ thống.",
+            "files": results,
+            "filename": results[0]["filename"] if results else "",
+            "chunks_count": sum(r["chunks_count"] for r in results)
         })
     except Exception as e:
         return jsonify({"error": f"Lỗi khi xử lý file: {str(e)}"}), 500

@@ -134,15 +134,14 @@ class PTITChatApp {
         this.exportChatBtn = document.getElementById("exportChatBtn");
         this.clearCurrentChatBtn = document.getElementById("clearCurrentChatBtn");
 
-        // File Upload & Attachment Elements
+        // File Upload & Attachment Elements (Hỗ trợ 1-3 file)
         this.fileUploadInput = document.getElementById("fileUploadInput");
         this.uploadFileBtn = document.getElementById("uploadFileBtn");
         this.attachmentPreview = document.getElementById("attachmentPreview");
-        this.attachmentFilename = document.getElementById("attachmentFilename");
-        this.attachmentFilesize = document.getElementById("attachmentFilesize");
-        this.attachmentIcon = document.getElementById("attachmentIcon");
-        this.removeAttachmentBtn = document.getElementById("removeAttachmentBtn");
-        this.attachedFile = null;
+        this.attachmentList = document.getElementById("attachmentList");
+        this.attachmentCountLabel = document.getElementById("attachmentCountLabel");
+        this.clearAllAttachmentsBtn = document.getElementById("clearAllAttachmentsBtn");
+        this.attachedFiles = [];
 
         // Modals
         this.kbModal = document.getElementById("kbModal");
@@ -205,17 +204,18 @@ class PTITChatApp {
             this.handleSubmit();
         });
 
-        // File Upload Listeners
+        // File Upload Listeners (Hỗ trợ chọn tối đa 3 file)
         if (this.uploadFileBtn && this.fileUploadInput) {
             this.uploadFileBtn.addEventListener("click", () => this.fileUploadInput.click());
             this.fileUploadInput.addEventListener("change", (e) => {
-                const file = e.target.files && e.target.files[0];
-                if (file) this.setAttachedFile(file);
+                const files = e.target.files ? Array.from(e.target.files) : [];
+                if (files.length) this.addAttachedFiles(files);
+                this.fileUploadInput.value = "";
             });
         }
 
-        if (this.removeAttachmentBtn) {
-            this.removeAttachmentBtn.addEventListener("click", () => this.clearAttachedFile());
+        if (this.clearAllAttachmentsBtn) {
+            this.clearAllAttachmentsBtn.addEventListener("click", () => this.clearAttachedFiles());
         }
 
         // Drag and Drop files onto chat area
@@ -238,7 +238,7 @@ class PTITChatApp {
             inputArea.addEventListener("drop", (e) => {
                 const dt = e.dataTransfer;
                 if (dt && dt.files && dt.files.length > 0) {
-                    this.setAttachedFile(dt.files[0]);
+                    this.addAttachedFiles(Array.from(dt.files));
                 }
             });
         }
@@ -700,11 +700,17 @@ class PTITChatApp {
         bubbleDiv.className = "msg-bubble";
 
         if (msg.role === "user") {
-            if (msg.attachment) {
-                const attachBadge = document.createElement("div");
-                attachBadge.className = "msg-attachment-badge";
-                attachBadge.innerHTML = `<i class="fa-solid fa-paperclip"></i> <span>${this.escapeHtml(msg.attachment.name)}</span> <small>(${msg.attachment.size || ""})</small>`;
-                bubbleDiv.appendChild(attachBadge);
+            const attachments = msg.attachments || (msg.attachment ? [msg.attachment] : []);
+            if (attachments.length > 0) {
+                const container = document.createElement("div");
+                container.className = "msg-attachments-container";
+                attachments.forEach(att => {
+                    const attachBadge = document.createElement("div");
+                    attachBadge.className = "msg-attachment-badge";
+                    attachBadge.innerHTML = `<i class="fa-solid fa-paperclip"></i> <span>${this.escapeHtml(att.name)}</span> <small>(${att.size || ""})</small>`;
+                    container.appendChild(attachBadge);
+                });
+                bubbleDiv.appendChild(container);
             }
             const textEl = document.createElement("div");
             textEl.className = "user-text-content";
@@ -832,51 +838,103 @@ class PTITChatApp {
         }, 50);
     }
 
-    // ATTACHMENT MANAGEMENT
-    setAttachedFile(file) {
-        if (!file) return;
+    // ATTACHMENT MANAGEMENT (HỖ TRỢ 1 ĐẾN 3 FILE)
+    addAttachedFiles(files) {
+        if (!files || !files.length) return;
         const validExtensions = [".pdf", ".docx", ".txt", ".md"];
-        const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
-        if (!validExtensions.includes(ext)) {
-            this.showToast("Chỉ hỗ trợ định dạng tệp: .pdf, .docx, .txt, .md", "warning");
-            if (this.fileUploadInput) this.fileUploadInput.value = "";
+        const currentCount = this.attachedFiles.length;
+        const remainingSlots = 3 - currentCount;
+
+        if (remainingSlots <= 0) {
+            this.showToast("Chỉ được đính kèm tối đa 3 file cùng lúc. Hãy xóa bớt file trước khi thêm mới.", "warning");
             return;
         }
 
-        if (file.size > 35 * 1024 * 1024) {
-            this.showToast("Kích thước file không được vượt quá 35MB", "warning");
-            if (this.fileUploadInput) this.fileUploadInput.value = "";
-            return;
+        let filesToAdd = files.slice(0, remainingSlots);
+        if (files.length > remainingSlots) {
+            this.showToast(`Chỉ được đính kèm tối đa 3 file. Đã nhận ${remainingSlots} file đầu tiên.`, "warning");
         }
 
-        this.attachedFile = file;
-        if (this.attachmentFilename) this.attachmentFilename.textContent = file.name;
-        if (this.attachmentFilesize) {
-            this.attachmentFilesize.textContent = `${this.formatFileSize(file.size)} • Tự động lưu data/ & chunking`;
+        let addedAny = false;
+        for (const file of filesToAdd) {
+            const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+            if (!validExtensions.includes(ext)) {
+                this.showToast(`Bỏ qua "${file.name}": Chỉ hỗ trợ .pdf, .docx, .txt, .md`, "warning");
+                continue;
+            }
+            if (file.size > 35 * 1024 * 1024) {
+                this.showToast(`Bỏ qua "${file.name}": Vượt quá giới hạn 35MB`, "warning");
+                continue;
+            }
+            if (this.attachedFiles.some(f => f.name === file.name && f.size === file.size)) {
+                this.showToast(`File "${file.name}" đã có trong danh sách đính kèm`, "info");
+                continue;
+            }
+            this.attachedFiles.push(file);
+            addedAny = true;
         }
 
-        if (this.attachmentIcon) {
-            if (ext === ".pdf") this.attachmentIcon.className = "fa-solid fa-file-pdf attachment-icon";
-            else if (ext === ".docx") this.attachmentIcon.className = "fa-solid fa-file-word attachment-icon";
-            else this.attachmentIcon.className = "fa-solid fa-file-lines attachment-icon";
-        }
-
-        if (this.attachmentPreview) {
-            this.attachmentPreview.classList.remove("hidden");
-        }
-
-        if (this.userInput) {
-            this.userInput.placeholder = "Nhập câu hỏi về tài liệu đính kèm hoặc bấm Gửi để tóm tắt...";
-            this.userInput.focus();
+        if (addedAny) {
+            this.renderAttachmentPreviews();
         }
     }
 
-    clearAttachedFile() {
-        this.attachedFile = null;
-        if (this.fileUploadInput) this.fileUploadInput.value = "";
-        if (this.attachmentPreview) this.attachmentPreview.classList.add("hidden");
+    removeAttachedFile(index) {
+        this.attachedFiles.splice(index, 1);
+        this.renderAttachmentPreviews();
+    }
+
+    clearAttachedFiles() {
+        this.attachedFiles = [];
+        this.renderAttachmentPreviews();
+    }
+
+    renderAttachmentPreviews() {
+        if (!this.attachmentPreview) return;
+        if (this.attachedFiles.length === 0) {
+            this.attachmentPreview.classList.add("hidden");
+            if (this.userInput) {
+                this.userInput.placeholder = "Nhập câu hỏi về học phí, môn học, quy chế PTIT...";
+            }
+            return;
+        }
+
+        this.attachmentPreview.classList.remove("hidden");
+        if (this.attachmentCountLabel) {
+            this.attachmentCountLabel.innerHTML = `<i class="fa-solid fa-paperclip"></i> Đã đính kèm ${this.attachedFiles.length}/3 tài liệu`;
+        }
+
+        if (this.attachmentList) {
+            this.attachmentList.innerHTML = "";
+            this.attachedFiles.forEach((file, idx) => {
+                const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+                let iconClass = "fa-solid fa-file-lines";
+                if (ext === ".pdf") iconClass = "fa-solid fa-file-pdf";
+                else if (ext === ".docx") iconClass = "fa-solid fa-file-word";
+
+                const chip = document.createElement("div");
+                chip.className = "attachment-chip";
+                chip.innerHTML = `
+                    <i class="${iconClass} attachment-icon"></i>
+                    <div class="attachment-details">
+                        <span class="attachment-filename" title="${this.escapeHtml(file.name)}">${this.escapeHtml(file.name)}</span>
+                        <span class="attachment-meta">${this.formatFileSize(file.size)}</span>
+                    </div>
+                    <button type="button" class="attachment-chip-remove" title="Xóa file này">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                `;
+                chip.querySelector(".attachment-chip-remove").addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    this.removeAttachedFile(idx);
+                });
+                this.attachmentList.appendChild(chip);
+            });
+        }
+
         if (this.userInput) {
-            this.userInput.placeholder = "Nhập câu hỏi về học phí, môn học, quy chế PTIT...";
+            this.userInput.placeholder = `Nhập câu hỏi về ${this.attachedFiles.length} tài liệu đính kèm hoặc bấm Gửi để tóm tắt...`;
+            this.userInput.focus();
         }
     }
 
@@ -891,16 +949,17 @@ class PTITChatApp {
     // SUBMIT QUESTION
     async handleSubmit() {
         const text = this.userInput.value.trim();
-        const fileToSend = this.attachedFile;
-        if ((!text && !fileToSend) || this.isProcessing) return;
+        const filesToSend = [...this.attachedFiles];
+        if ((!text && filesToSend.length === 0) || this.isProcessing) return;
 
         // Reset Textarea
         this.userInput.value = "";
         this.userInput.style.height = "38px";
         if (this.chatForm) this.chatForm.classList.remove("multiline");
 
-        const displayQuestion = text || (fileToSend ? `Tóm tắt nội dung tài liệu: ${fileToSend.name}` : "");
-        const actualQuestion = text || (fileToSend ? `Hãy tóm tắt chi tiết các nội dung chính và thông tin quan trọng nhất trong tài liệu '${fileToSend.name}'.` : "");
+        const filenamesStr = filesToSend.map(f => f.name).join(", ");
+        const displayQuestion = text || (filesToSend.length > 0 ? `Tóm tắt nội dung tài liệu: ${filenamesStr}` : "");
+        const actualQuestion = text || (filesToSend.length > 0 ? `Hãy tóm tắt chi tiết các nội dung chính và thông tin quan trọng nhất trong các tài liệu: ${filenamesStr}.` : "");
 
         let currentSession = this.sessions.find(s => s.id === this.currentSessionId);
         if (!currentSession) {
@@ -910,7 +969,7 @@ class PTITChatApp {
 
         // Set title on first message
         if (currentSession.messages.length === 0) {
-            const titleSource = fileToSend ? `Tài liệu: ${fileToSend.name}` : text;
+            const titleSource = filesToSend.length > 0 ? `Tài liệu: ${filesToSend[0].name}${filesToSend.length > 1 ? ` (+${filesToSend.length - 1})` : ""}` : text;
             currentSession.title = titleSource.length > 32 ? titleSource.substring(0, 32) + "..." : titleSource;
             this.currentChatTitle.textContent = currentSession.title;
         }
@@ -919,10 +978,10 @@ class PTITChatApp {
         const userMsg = {
             role: "user",
             content: displayQuestion,
-            attachment: fileToSend ? {
-                name: fileToSend.name,
-                size: this.formatFileSize(fileToSend.size)
-            } : null,
+            attachments: filesToSend.map(f => ({
+                name: f.name,
+                size: this.formatFileSize(f.size)
+            })),
             timestamp: new Date().toISOString()
         };
         currentSession.messages.push(userMsg);
@@ -930,27 +989,27 @@ class PTITChatApp {
         this.appendMessageToDOM(userMsg, true);
 
         // Clear attachment UI now that message is queued
-        this.clearAttachedFile();
+        this.clearAttachedFiles();
 
         // Show Typing Indicator
         this.isProcessing = true;
         this.sendBtn.disabled = true;
         this.typingIndicator.classList.remove("hidden");
-        if (fileToSend) {
-            this.typingLabel.textContent = "Đang lưu tài liệu vào thư mục data, xử lý & băm nhỏ dữ liệu (chunking)...";
+        if (filesToSend.length > 0) {
+            this.typingLabel.textContent = `Đang lưu ${filesToSend.length} tài liệu vào thư mục data, xử lý & băm nhỏ dữ liệu (chunking)...`;
         } else {
             this.typingLabel.textContent = "Đang tra cứu Vector DB & tạo câu trả lời...";
         }
         this.scrollToBottom();
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), fileToSend ? 120000 : 45000);
+        const timeoutId = setTimeout(() => controller.abort(), filesToSend.length > 0 ? 180000 : 45000);
 
         try {
             let response;
-            if (fileToSend) {
+            if (filesToSend.length > 0) {
                 const formData = new FormData();
-                formData.append("file", fileToSend);
+                filesToSend.forEach(f => formData.append("files", f));
                 formData.append("question", actualQuestion);
                 formData.append("api_key", this.settings.apiKey || "");
                 formData.append("model", this.settings.model || "");
@@ -1011,10 +1070,11 @@ class PTITChatApp {
             this.saveSessions();
             this.appendMessageToDOM(botMsg, true);
 
-            // Update KB stats in sidebar if file was uploaded
-            if (fileToSend) {
+            // Update KB stats in sidebar if files were uploaded
+            if (filesToSend.length > 0) {
                 this.fetchKBStatus();
-                this.showToast(`Đã lưu "${fileToSend.name}" vào data/ và hoàn tất băm chunks!`, "success");
+                const msgText = filesToSend.length === 1 ? `Đã lưu "${filesToSend[0].name}" vào data/ và hoàn tất băm chunks!` : `Đã lưu ${filesToSend.length} tài liệu vào data/ và hoàn tất băm chunks!`;
+                this.showToast(msgText, "success");
             }
 
             // Auto-voice if enabled

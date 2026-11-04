@@ -186,16 +186,11 @@
 
                     <!-- ATTACHMENT PREVIEW BAR -->
                     <div class="attachment-preview-bar hidden" id="attachmentPreview">
-                        <div class="attachment-file-info">
-                            <i class="fa-solid fa-file-pdf attachment-icon" id="attachmentIcon"></i>
-                            <div class="attachment-details">
-                                <span class="attachment-filename" id="attachmentFilename">tailieu.pdf</span>
-                                <span class="attachment-meta" id="attachmentFilesize">Đang chuẩn bị lưu vào data/ & chunking</span>
-                            </div>
+                        <div class="attachment-preview-header">
+                            <span id="attachmentCountLabel"><i class="fa-solid fa-paperclip"></i> Tài liệu đính kèm (Tối đa 3 file)</span>
+                            <button type="button" class="attachment-clear-all-btn" id="clearAllAttachmentsBtn">Xóa tất cả</button>
                         </div>
-                        <button type="button" class="attachment-remove-btn" id="removeAttachmentBtn" title="Hủy file đính kèm">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
+                        <div class="attachment-list" id="attachmentList"></div>
                     </div>
 
                     <!-- Input form -->
@@ -284,8 +279,8 @@
                             </div>
 
                             <div class="input-actions-group">
-                                <input type="file" id="fileUploadInput" accept=".pdf,.docx,.txt,.md" style="display: none;">
-                                <button type="button" class="tool-btn" id="uploadFileBtn" title="Tải lên tài liệu (.pdf, .docx, .txt, .md)">
+                                <input type="file" id="fileUploadInput" accept=".pdf,.docx,.txt,.md" multiple style="display: none;">
+                                <button type="button" class="tool-btn" id="uploadFileBtn" title="Tải lên tài liệu (.pdf, .docx, .txt, .md - tối đa 3 file)">
                                     <i class="fa-solid fa-paperclip"></i>
                                 </button>
                                 <button type="button" class="tool-btn" id="voiceInputBtn" title="Nhập câu hỏi bằng giọng nói (Speech-to-Text)">
