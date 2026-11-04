@@ -9,4 +9,5 @@ pymupdf
 pillow
 opencv-python
 numpy
+python-docx
 

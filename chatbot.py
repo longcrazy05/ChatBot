@@ -371,31 +371,92 @@ def process_pdf(pdf_path, output_dir="processed_data", batch_size=5, max_pages=N
     print(f"\n[✓] Kết thúc lượt xử lý file: {file_name}")
 
 
-def process_data_folder(data_dir="data", output_dir="processed_data", batch_size=5, max_pages_per_file=None, force=False):
-    """Xử lý toàn bộ các file PDF trong thư mục data theo batch và lưu kết quả Markdown."""
-    os.makedirs(output_dir, exist_ok=True)
-    pdf_files = glob.glob(os.path.join(data_dir, "*.pdf"))
+def process_docx_file(docx_path, output_dir="processed_data"):
+    """Trích xuất văn bản và bảng biểu từ file DOCX sang Markdown."""
+    try:
+        import docx
+    except ImportError:
+        print("   [!] Chưa cài đặt thư viện python-docx. Chạy 'pip install python-docx' để hỗ trợ file .docx")
+        return False
 
-    if not pdf_files:
-        print(f"[!] Không tìm thấy file PDF trong: {data_dir}")
+    base_name = os.path.splitext(os.path.basename(docx_path))[0]
+    md_file = os.path.join(output_dir, f"{base_name}.md")
+    try:
+        doc = docx.Document(docx_path)
+        lines = [f"# Tài liệu: {os.path.basename(docx_path)}\n\n## Trang 1 - [DOCX]\n"]
+        for p in doc.paragraphs:
+            if p.text.strip():
+                lines.append(p.text.strip())
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [c.text.strip().replace("\n", " ") for c in row.cells]
+                lines.append("| " + " | ".join(cells) + " |")
+        content = "\n\n".join(lines) + "\n\n---\n"
+        with open(md_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"   => [ĐÃ LƯU] Thành công file DOCX: {md_file}")
+        return True
+    except Exception as e:
+        print(f"   [!] Lỗi khi xử lý file DOCX {docx_path}: {e}")
+        return False
+
+
+def process_text_or_md_file(file_path, output_dir="processed_data"):
+    """Chuẩn hóa nội dung file TXT hoặc MD và lưu vào processed_data."""
+    base_name = os.path.splitext(os.path.basename(file_path))[0]
+    md_file = os.path.join(output_dir, f"{base_name}.md")
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            raw_text = f.read().strip()
+        content = f"# Tài liệu: {os.path.basename(file_path)}\n\n## Trang 1 - [TEXT]\n\n{raw_text}\n\n---\n"
+        with open(md_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"   => [ĐÃ LƯU] Thành công file văn bản: {md_file}")
+        return True
+    except Exception as e:
+        print(f"   [!] Lỗi khi xử lý file {file_path}: {e}")
+        return False
+
+
+def process_data_folder(data_dir="data", output_dir="processed_data", batch_size=5, max_pages_per_file=None, force=False):
+    """Xử lý toàn bộ các file PDF, DOCX, TXT, MD trong thư mục data và lưu kết quả Markdown."""
+    os.makedirs(output_dir, exist_ok=True)
+    supported_extensions = ["*.pdf", "*.docx", "*.txt", "*.md"]
+    all_files = []
+    for ext in supported_extensions:
+        all_files.extend(glob.glob(os.path.join(data_dir, ext)))
+
+    if not all_files:
+        print(f"[!] Không tìm thấy tài liệu (.pdf, .docx, .txt, .md) trong: {data_dir}")
         return
 
-    total_files = len(pdf_files)
-    print(f"[*] Tìm thấy {total_files} file PDF trong thư mục '{data_dir}'. Bắt đầu xử lý...")
+    total_files = len(all_files)
+    print(f"[*] Tìm thấy {total_files} tài liệu trong thư mục '{data_dir}'. Bắt đầu xử lý...")
 
-    for idx, pdf_path in enumerate(pdf_files, start=1):
-        if not force and is_file_processed(pdf_path, output_dir):
-            print(f"\n[i] [{idx}/{total_files}] Bỏ qua file đã hoàn thành: {os.path.basename(pdf_path)}")
+    for idx, fpath in enumerate(all_files, start=1):
+        fname = os.path.basename(fpath)
+        f_ext = os.path.splitext(fname)[1].lower()
+        base_name = os.path.splitext(fname)[0]
+        target_md = os.path.join(output_dir, f"{base_name}.md")
+
+        if not force and os.path.exists(target_md) and (f_ext != ".pdf" or is_file_processed(fpath, output_dir)):
+            print(f"\n[i] [{idx}/{total_files}] Bỏ qua file đã hoàn thành: {fname}")
             continue
 
-        process_pdf(
-            pdf_path=pdf_path,
-            output_dir=output_dir,
-            batch_size=batch_size,
-            max_pages=max_pages_per_file,
-            file_idx=idx,
-            total_files=total_files
-        )
+        print(f"\n--- [{idx}/{total_files}] Đang xử lý: {fname} ---")
+        if f_ext == ".pdf":
+            process_pdf(
+                pdf_path=fpath,
+                output_dir=output_dir,
+                batch_size=batch_size,
+                max_pages=max_pages_per_file,
+                file_idx=idx,
+                total_files=total_files
+            )
+        elif f_ext == ".docx":
+            process_docx_file(fpath, output_dir=output_dir)
+        elif f_ext in [".txt", ".md"]:
+            process_text_or_md_file(fpath, output_dir=output_dir)
 
     print(f"\n{'='*60}")
     print(f"[✓] ĐÃ HOÀN TẤT LƯỢT XỬ LÝ DỮ LIỆU!")
