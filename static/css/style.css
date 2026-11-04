@@ -601,6 +601,12 @@ html, body {
     color: var(--text-primary);
 }
 
+#clearCurrentChatBtn:hover {
+    color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.25);
+}
+
 .mobile-menu-btn, .mobile-close-btn {
     display: none;
 }
