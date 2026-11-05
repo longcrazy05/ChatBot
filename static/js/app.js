@@ -230,16 +230,13 @@ class PTITChatApp {
             }
         });
 
-        // Khôi phục trạng thái sidebar đã lưu trên Desktop
-        if (window.innerWidth > 768) {
-            try {
-                if (localStorage.getItem("ptit_chat_sidebar_collapsed") === "true") {
-                    this.sidebar.classList.add("collapsed");
-                    if (this.openSidebarBtn) {
-                        this.openSidebarBtn.title = "Mở thanh lịch sử trò chuyện (Ctrl + B)";
-                    }
-                }
-            } catch (e) {}
+        // Mặc định luôn mở thanh lịch sử trò chuyện khi vào trang để đảm bảo không bị mất danh mục
+        try {
+            localStorage.removeItem("ptit_chat_sidebar_collapsed");
+        } catch (e) {}
+        this.sidebar.classList.remove("collapsed");
+        if (this.openSidebarBtn) {
+            this.openSidebarBtn.title = "Thu gọn thanh lịch sử trò chuyện (Ctrl + B)";
         }
 
         // Sessions
