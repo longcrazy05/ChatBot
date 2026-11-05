@@ -181,9 +181,60 @@ class PTITChatApp {
         // Theme Toggle
         this.themeToggleBtn.addEventListener("click", () => this.toggleTheme());
 
-        // Sidebar Mobile
-        this.openSidebarBtn.addEventListener("click", () => this.sidebar.classList.add("open"));
-        this.closeSidebarBtn.addEventListener("click", () => this.sidebar.classList.remove("open"));
+        // Sidebar Toggle (Cửa sổ đóng/mở thanh lịch sử trên Desktop & Mobile)
+        const toggleSidebar = () => {
+            const isMobile = window.innerWidth <= 768;
+            if (isMobile) {
+                this.sidebar.classList.toggle("open");
+            } else {
+                const isCollapsed = this.sidebar.classList.toggle("collapsed");
+                try {
+                    localStorage.setItem("ptit_chat_sidebar_collapsed", isCollapsed ? "true" : "false");
+                } catch (e) {}
+                if (this.openSidebarBtn) {
+                    this.openSidebarBtn.title = isCollapsed ? "Mở thanh lịch sử trò chuyện (Ctrl + B)" : "Thu gọn thanh lịch sử trò chuyện (Ctrl + B)";
+                }
+            }
+        };
+
+        if (this.openSidebarBtn) {
+            this.openSidebarBtn.addEventListener("click", toggleSidebar);
+        }
+        if (this.closeSidebarBtn) {
+            this.closeSidebarBtn.addEventListener("click", toggleSidebar);
+        }
+
+        // Đóng sidebar khi click ra ngoài trên mobile
+        document.addEventListener("click", (e) => {
+            if (window.innerWidth <= 768 && this.sidebar && this.sidebar.classList.contains("open")) {
+                if (!this.sidebar.contains(e.target) && this.openSidebarBtn && !this.openSidebarBtn.contains(e.target)) {
+                    this.sidebar.classList.remove("open");
+                }
+            }
+        });
+
+        // Phím tắt Ctrl+B hoặc Cmd+B để mở/thu gọn thanh lịch sử
+        document.addEventListener("keydown", (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+                if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") && e.target !== this.userInput) {
+                    return;
+                }
+                e.preventDefault();
+                toggleSidebar();
+            }
+        });
+
+        // Khôi phục trạng thái sidebar đã lưu trên Desktop
+        if (window.innerWidth > 768) {
+            try {
+                if (localStorage.getItem("ptit_chat_sidebar_collapsed") === "true") {
+                    this.sidebar.classList.add("collapsed");
+                    if (this.openSidebarBtn) {
+                        this.openSidebarBtn.title = "Mở thanh lịch sử trò chuyện (Ctrl + B)";
+                    }
+                }
+            } catch (e) {}
+        }
 
         // Sessions
         this.newChatBtn.addEventListener("click", () => this.createNewSession());

@@ -154,7 +154,50 @@ html, body {
     flex-direction: column;
     flex-shrink: 0;
     z-index: 100;
-    transition: transform var(--transition-normal);
+    transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                margin-left 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.2s ease,
+                transform var(--transition-normal);
+}
+
+.sidebar.collapsed {
+    width: 0 !important;
+    min-width: 0 !important;
+    margin-left: calc(-1 * var(--sidebar-width));
+    border-right: none !important;
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.sidebar-toggle-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.sidebar-toggle-btn:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-card-hover);
+    border-color: var(--border-subtle);
+}
+
+.sidebar-toggle-btn svg {
+    display: block;
+    stroke: currentColor;
+    transition: stroke var(--transition-fast);
+}
+
+.sidebar-toggle-btn:hover svg {
+    stroke: var(--primary);
 }
 
 .sidebar-header {
@@ -1993,6 +2036,10 @@ select option:hover,
         bottom: 0;
         transform: translateX(-100%);
         box-shadow: var(--shadow-lg);
+        margin-left: 0 !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: min(300px, 85vw) !important;
     }
     .sidebar.open {
         transform: translateX(0);
