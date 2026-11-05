@@ -201,7 +201,13 @@ class PTITChatApp {
             this.openSidebarBtn.addEventListener("click", toggleSidebar);
         }
         if (this.closeSidebarBtn) {
-            this.closeSidebarBtn.addEventListener("click", toggleSidebar);
+            this.closeSidebarBtn.addEventListener("click", () => {
+                if (window.innerWidth <= 768) {
+                    this.sidebar.classList.remove("open");
+                } else {
+                    toggleSidebar();
+                }
+            });
         }
 
         // Đóng sidebar khi click ra ngoài trên mobile
