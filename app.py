@@ -2,13 +2,26 @@ import os
 import re
 import sys
 import time
+import uuid
+import json
+import shutil
 import requests
 import subprocess
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
+import document_parser
+import voice_service
 
 load_dotenv()
 app = Flask(__name__)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CHROMA_DIR = os.path.join(BASE_DIR, "chroma_db")
+PROCESSED_DIR = os.path.join(BASE_DIR, "processed_data")
+VOICE_UPLOAD_DIR = os.path.join(BASE_DIR, "static", "voice_uploads")
+USER_UPLOADS_DIR = os.path.join(BASE_DIR, "user_uploads")
+os.makedirs(VOICE_UPLOAD_DIR, exist_ok=True)
+os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
 
 # ==============================================================================
 # CẤU HÌNH API & CÁC MODEL GEMINI ĐANG HOẠT ĐỘNG
@@ -31,7 +44,7 @@ _cached_chroma_client = None
 _cached_collection = None
 
 
-def get_vector_db(chroma_dir="chroma_db"):
+def get_vector_db(chroma_dir=CHROMA_DIR):
     """Khởi tạo và cache kết nối tới ChromaDB."""
     global _cached_chroma_client, _cached_collection
     if _cached_collection is not None:
@@ -44,6 +57,197 @@ def get_vector_db(chroma_dir="chroma_db"):
         metadata={"hnsw:space": "cosine"}
     )
     return _cached_collection
+
+
+_cached_user_collection = None
+
+
+def get_user_vector_db(chroma_dir=CHROMA_DIR):
+    """Khởi tạo và cache kết nối tới collection user_uploaded_docs cho tài liệu người dùng tải lên."""
+    global _cached_chroma_client, _cached_user_collection
+    if _cached_user_collection is not None:
+        return _cached_user_collection
+    get_vector_db(chroma_dir)
+    _cached_user_collection = _cached_chroma_client.get_or_create_collection(
+        name="user_uploaded_docs",
+        metadata={"hnsw:space": "cosine"}
+    )
+    return _cached_user_collection
+
+
+def cleanup_expired_user_docs(max_age_hours=None):
+    """
+    Giữ tài liệu người dùng vĩnh viễn theo phiên làm việc để khi khởi động lại server
+    client vẫn có thể tiếp tục truy vấn tài liệu cũ (chỉ xóa khi người dùng chủ động yêu cầu).
+    """
+    pass
+
+
+def get_session_uploaded_files(session_id):
+    """Lấy danh sách các file duy nhất đã tải lên trong phiên (từ ChromaDB và thư mục user_uploads)."""
+    if not session_id:
+        return []
+    try:
+        coll = get_user_vector_db()
+        res = coll.get(where={"session_id": session_id}, include=["metadatas"])
+        files_map = {}
+        if res and res.get("metadatas"):
+            for m in res["metadatas"]:
+                fname = m.get("filename")
+                if fname:
+                    if fname not in files_map:
+                        files_map[fname] = {
+                            "filename": fname,
+                            "chunks_count": 0,
+                            "uploaded_at": m.get("created_at", time.time())
+                        }
+                    files_map[fname]["chunks_count"] += 1
+
+        # Đọc thêm từ thư mục đĩa user_uploads/{session_id} để bảo toàn nếu restart server
+        session_dir = os.path.join(USER_UPLOADS_DIR, session_id)
+        if os.path.exists(session_dir):
+            for item in os.listdir(session_dir):
+                if item.endswith("_extracted.json"):
+                    continue
+                fpath = os.path.join(session_dir, item)
+                if os.path.isfile(fpath) and item not in files_map:
+                    chunks_count = 1
+                    ext_json = os.path.join(session_dir, f"{os.path.splitext(item)[0]}_extracted.json")
+                    if os.path.exists(ext_json):
+                        try:
+                            with open(ext_json, "r", encoding="utf-8") as f_ext:
+                                d_ext = json.load(f_ext)
+                                chunks_count = d_ext.get("total_chunks", len(d_ext.get("chunks", []))) or 1
+                        except Exception:
+                            pass
+                    files_map[item] = {
+                        "filename": item,
+                        "chunks_count": chunks_count,
+                        "uploaded_at": os.path.getmtime(fpath)
+                    }
+
+        return list(files_map.values())
+    except Exception as e:
+        print(f"[!] Error getting session files: {e}")
+        return []
+
+
+def get_session_intro_chunks(session_id):
+    """Lấy chunk mở đầu (Trang 1 / chunk_index=0) của từng file tải lên để luôn có tiêu đề và chủ đề."""
+    if not session_id:
+        return []
+    try:
+        coll = get_user_vector_db()
+        res = coll.get(where={"session_id": session_id}, include=["documents", "metadatas"])
+        intro_chunks = []
+        seen_files = set()
+        if res and res.get("documents"):
+            for doc, meta in zip(res["documents"], res["metadatas"]):
+                fn = meta.get("filename")
+                c_idx = meta.get("chunk_index", 0)
+                if fn and fn not in seen_files and (c_idx == 0 or meta.get("page", 1) == 1):
+                    seen_files.add(fn)
+                    intro_chunks.append({
+                        "content": doc,
+                        "filename": fn,
+                        "page": meta.get("page", 1),
+                        "source_type": "user_doc"
+                    })
+        return intro_chunks
+    except Exception as e:
+        print(f"[!] Error getting intro chunks: {e}")
+        return []
+
+
+IT_SUBJECT_MAPPING = {
+    "socket": ["socket", "lập trình mạng"],
+    "sockets": ["socket", "lập trình mạng"],
+    "network": ["mạng", "mạng máy tính", "lập trình mạng"],
+    "networking": ["mạng", "mạng máy tính"],
+    "programming": ["lập trình"],
+    "database": ["cơ sở dữ liệu"],
+    "os": ["hệ điều hành"],
+    "operating": ["hệ điều hành"],
+    "algorithm": ["thuật toán", "giải thuật"],
+    "security": ["an toàn thông tin", "an ninh mạng"],
+    "web": ["lập trình web"],
+    "ai": ["trí tuệ nhân tạo"]
+}
+
+
+def extract_user_doc_topics(session_id):
+    """Trích xuất từ khóa chủ đề cốt lõi từ tên file và trang mở đầu của các tài liệu tải lên."""
+    if not session_id:
+        return []
+    keywords = []
+    files = get_session_uploaded_files(session_id)
+    for f in files:
+        fname = f.get("filename", "")
+        name_clean = os.path.splitext(fname)[0].replace("-", " ").replace("_", " ")
+        for w in re.findall(r"\w+", name_clean):
+            if len(w) > 2 and w.lower() not in ["notes", "slide", "slides", "bai", "giang", "de", "cuong", "doc", "tailieu", "pdf"]:
+                keywords.append(w)
+
+    intros = get_session_intro_chunks(session_id)
+    for it in intros:
+        lines = it.get("content", "").splitlines()[:6]
+        for line in lines:
+            for w in re.findall(r"\b[A-Za-zÀ-ỹ]{3,}\b", line):
+                wl = w.lower()
+                if wl not in ["the", "and", "for", "with", "all", "rights", "reserved", "page", "copyright"]:
+                    keywords.append(w)
+
+    seen = set()
+    unique_kw = []
+    for k in keywords:
+        kl = k.lower()
+        if kl not in seen:
+            seen.add(kl)
+            unique_kw.append(k)
+            # Tự động ánh xạ môn học tiếng Anh sang tiếng Việt PTIT
+            if kl in IT_SUBJECT_MAPPING:
+                for mapped_term in IT_SUBJECT_MAPPING[kl]:
+                    if mapped_term.lower() not in seen:
+                        seen.add(mapped_term.lower())
+                        unique_kw.append(mapped_term)
+
+    return unique_kw[:12]
+
+
+def query_user_documents(query, session_id, n_results=4, custom_api_key=None):
+    """Truy vấn các đoạn văn bản từ các tài liệu do người dùng tải lên, đảm bảo luôn có trang mở đầu."""
+    if not session_id:
+        return []
+    matched = []
+    q_vec = get_embedding_rest(query, api_key=custom_api_key)
+    if q_vec:
+        try:
+            coll = get_user_vector_db()
+            res = coll.query(
+                query_embeddings=[q_vec],
+                n_results=n_results,
+                where={"session_id": session_id}
+            )
+            if res and res.get("documents") and len(res["documents"]) > 0:
+                for doc, meta in zip(res["documents"][0], res["metadatas"][0]):
+                    matched.append({
+                        "content": doc,
+                        "filename": meta.get("filename", "Tài liệu người dùng"),
+                        "page": meta.get("page", 1),
+                        "source_type": "user_doc"
+                    })
+        except Exception as e:
+            print(f"[!] Error querying user docs: {e}")
+
+    # Luôn bổ sung chunk mở đầu (Trang 1 chứa tên môn/tiêu đề) nếu chưa có
+    intro_chunks = get_session_intro_chunks(session_id)
+    seen_contents = {m["content"] for m in matched}
+    for it in intro_chunks:
+        if it["content"] not in seen_contents:
+            matched.insert(0, it)
+            seen_contents.add(it["content"])
+
+    return matched[:max(n_results, len(intro_chunks))]
 
 
 # ==============================================================================
@@ -103,7 +307,7 @@ def get_embedding_rest(text, api_key=API_KEY, timeout=3.0):
 # HYBRID RETRIEVAL (TÌM KIẾM TÀI LIỆU CHÍNH XÁC & MỞ RỘNG TRANG CHA)
 # ==============================================================================
 
-def get_parent_document_page(source_file, page_num, processed_dir="processed_data"):
+def get_parent_document_page(source_file, page_num, processed_dir=PROCESSED_DIR):
     """Lấy toàn bộ nội dung của trang tương ứng từ file Markdown gốc."""
     if not source_file:
         return ""
@@ -128,7 +332,7 @@ def get_parent_document_page(source_file, page_num, processed_dir="processed_dat
     return content.strip()
 
 
-def keyword_search_all(query, processed_dir="processed_data", top_k=3):
+def keyword_search_all(query, processed_dir=PROCESSED_DIR, top_k=3):
     """Tìm kiếm chính xác và theo từ khóa trên toàn bộ các file Markdown."""
     if not os.path.exists(processed_dir):
         return []
@@ -307,7 +511,7 @@ def smart_query_knowledge_base(query, n_results=4, custom_api_key=None):
 # SINH CÂU TRẢ LỜI QUA LLM (GEMINI PROMPT CHUẨN XÁC, KHÔNG BỊA ĐẶT)
 # ==============================================================================
 
-def generate_llm_answer(question, context_str, custom_api_key=None, preferred_model=None, history=None):
+def generate_llm_answer(question, context_str, custom_api_key=None, preferred_model=None, history=None, has_user_docs=False, user_files=None):
     """Sinh câu trả lời thông minh qua Gemini LLM."""
     active_key = custom_api_key.strip() if (custom_api_key and custom_api_key.strip()) else API_KEY
 
@@ -321,6 +525,20 @@ def generate_llm_answer(question, context_str, custom_api_key=None, preferred_mo
                 h_lines.append(f"{role}: {cnt}")
         if h_lines:
             history_prompt = "LỊCH SỬ HỘI THOẠI TRƯỚC ĐÓ:\n" + "\n".join(h_lines) + "\n\n"
+
+    user_docs_instruction = ""
+    if has_user_docs:
+        files_list_str = ", ".join([f["filename"] for f in (user_files or [])]) if user_files else "Tài liệu người dùng tải lên"
+        user_docs_instruction = f"""
+4. NGUYÊN TẮC BẮT BUỘC KHI XỬ LÝ TÀI LIỆU NGƯỜI DÙNG TẢI LÊN ({files_list_str}):
+   - ĐẶC BIỆT CHÚ Ý ĐẠI TỪ THAY THẾ: Khi người dùng đặt câu hỏi có từ chỉ định như "môn học này", "môn này", "học phần này", "tài liệu này", "file này", "bài này", "nội dung này", "chủ đề này", "kiến thức này":
+     -> Người dùng ĐANG HỎI VỀ CHỦ ĐỀ/MÔN HỌC TRONG TÀI LIỆU HỌ VỪA TẢI LÊN ({files_list_str}).
+     -> Bạn TUYỆT ĐỐI KHÔNG ĐƯỢC trả lời rằng "chưa xác định rõ môn học nào" hay hỏi ngược lại người dùng.
+     -> Hãy phân tích tên file ({files_list_str}) và các đoạn trích dẫn tài liệu người dùng ở trên để xác định môn học/chủ đề (Ví dụ: file Sockets-notes.pdf là về Sockets / Lập trình mạng - Network Programming).
+     -> Sau đó, hãy đối chiếu môn học/chủ đề đó với Cơ sở dữ liệu PTIT để trả lời chi tiết: Môn học này có trong chương trình đào tạo của PTIT không, thuộc ngành nào (ví dụ ngành Công nghệ Thông tin, chuyên ngành Mạng máy tính và truyền thông dữ liệu...), mã học phần là gì, số tín chỉ, học kỳ, môn tiên quyết nếu có.
+   - Khi trả lời, hãy mở đầu rõ ràng: "Dựa trên tài liệu **{files_list_str}** bạn đã tải lên, tài liệu đề cập đến môn học/chủ đề **[Tên môn/chủ đề]**... Đối chiếu với chương trình đào tạo của Học viện PTIT...".
+   - Nếu có sự khác biệt hoặc mâu thuẫn giữa thông tin trong file người dùng tải lên và quy định chính thức của PTIT, hãy chỉ ra điểm khác biệt đó một cách khách quan.
+"""
 
     system_instruction = f"""
 Bạn là Trợ lý Ảo AI chính thức của Học viện Công nghệ Bưu chính Viễn thông (PTIT).
@@ -348,7 +566,7 @@ NGUYÊN TẮC BẮT BUỘC:
    - Thân thiện, tôn trọng, khách quan.
    - TUYỆT ĐỐI KHÔNG dùng ký hiệu LaTeX toán học như $\\ge$, $\\le$ hay dấu $, hãy dùng tiếng Việt tự nhiên (>=, <=, "từ... trở lên").
    - TUYỆT ĐỐI KHÔNG để lộ tên file nội bộ (.md, .pdf), số trang tài liệu hay ghi chú debug trong câu trả lời.
-"""
+{user_docs_instruction}"""
 
     valid_models = [
         "gemini-3.1-flash-lite",
@@ -528,49 +746,335 @@ def get_status():
         return jsonify({"status": "warning", "chunks_count": 0, "message": str(e)})
 
 
+@app.route("/api/upload", methods=["POST"])
+def upload_documents():
+    session_id = request.form.get("session_id", "").strip()
+    custom_api_key = request.form.get("api_key", "").strip()
+    active_key = custom_api_key if custom_api_key else API_KEY
+
+    if not session_id:
+        return jsonify({"error": "Thiếu mã phiên (session_id)."}), 400
+
+    if "files" not in request.files:
+        return jsonify({"error": "Không tìm thấy file tải lên."}), 400
+
+    uploaded_files = request.files.getlist("files")
+    if not uploaded_files or (len(uploaded_files) == 1 and uploaded_files[0].filename == ""):
+        return jsonify({"error": "Vui lòng chọn ít nhất 1 file."}), 400
+
+    existing_files = get_session_uploaded_files(session_id)
+    existing_filenames = {f["filename"] for f in existing_files}
+
+    valid_new_files = [f for f in uploaded_files if f.filename]
+    incoming_filenames = {f.filename for f in valid_new_files}
+    total_unique = len(existing_filenames.union(incoming_filenames))
+
+    if total_unique > 3:
+        return jsonify({
+            "error": f"Mỗi phiên chỉ được tải tối đa 3 tài liệu. Hiện tại bạn đã có {len(existing_files)} tài liệu."
+        }), 400
+
+    coll = get_user_vector_db()
+    processed_files = []
+
+    for f in valid_new_files:
+        fname = f.filename
+        if not document_parser.is_allowed_file(fname):
+            return jsonify({
+                "error": f"File '{fname}' không được hỗ trợ. Chỉ chấp nhận các định dạng: .pdf, .docx, .txt, .md"
+            }), 400
+
+        file_bytes = f.read()
+        if len(file_bytes) > document_parser.MAX_FILE_SIZE_BYTES:
+            return jsonify({
+                "error": f"File '{fname}' vượt quá dung lượng tối đa 5MB cho phép."
+            }), 400
+
+        try:
+            chunks = document_parser.extract_chunks_from_document(file_bytes, fname)
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+        except Exception as ex:
+            return jsonify({"error": f"Lỗi xử lý file '{fname}': {str(ex)}"}), 500
+
+        # LƯU FILE GỐC CỦA CLIENT VÀ DỮ LIỆU TRÍCH XUẤT VÀO user_uploads/{session_id}/
+        session_dir = os.path.join(USER_UPLOADS_DIR, session_id)
+        os.makedirs(session_dir, exist_ok=True)
+        saved_file_path = os.path.join(session_dir, fname)
+        with open(saved_file_path, "wb") as f_out:
+            f_out.write(file_bytes)
+
+        base_name = os.path.splitext(fname)[0]
+        extracted_json_path = os.path.join(session_dir, f"{base_name}_extracted.json")
+        try:
+            with open(extracted_json_path, "w", encoding="utf-8") as f_json:
+                json.dump({
+                    "filename": fname,
+                    "session_id": session_id,
+                    "uploaded_at": time.time(),
+                    "total_chunks": len(chunks),
+                    "chunks": chunks
+                }, f_json, ensure_ascii=False, indent=2)
+        except Exception as e_json:
+            print(f"[!] Warning saving extracted json: {e_json}")
+
+        if fname in existing_filenames:
+            try:
+                coll.delete(where={"$and": [{"session_id": session_id}, {"filename": fname}]})
+            except Exception:
+                pass
+
+        chunk_texts = [c["text"] for c in chunks]
+        embeddings = document_parser.batch_get_embeddings(chunk_texts, api_key=active_key)
+
+        valid_ids = []
+        valid_embeddings = []
+        valid_docs = []
+        valid_metas = []
+        now_ts = time.time()
+
+        for idx, (c, emb) in enumerate(zip(chunks, embeddings)):
+            if emb:
+                valid_ids.append(f"{session_id}_{fname}_{idx}_{int(now_ts)}")
+                valid_embeddings.append(emb)
+                valid_docs.append(c["text"])
+                valid_metas.append({
+                    "session_id": session_id,
+                    "filename": fname,
+                    "page": c.get("page", 1),
+                    "chunk_index": c.get("chunk_index", 0),
+                    "created_at": now_ts
+                })
+
+        if not valid_embeddings:
+            return jsonify({
+                "error": f"Không thể tạo vector nhúng cho file '{fname}'. Vui lòng kiểm tra lại API Key hoặc kết nối mạng."
+            }), 500
+
+        coll.add(
+            ids=valid_ids,
+            embeddings=valid_embeddings,
+            documents=valid_docs,
+            metadatas=valid_metas
+        )
+        processed_files.append({"filename": fname, "chunks": len(valid_docs)})
+
+    updated_files = get_session_uploaded_files(session_id)
+    return jsonify({
+        "status": "success",
+        "message": f"Đã nạp thành công {len(processed_files)} tài liệu.",
+        "files": updated_files
+    })
+
+
+@app.route("/api/session-docs", methods=["GET", "DELETE"])
+def session_docs():
+    if request.method == "GET":
+        session_id = request.args.get("session_id", "").strip()
+        files = get_session_uploaded_files(session_id)
+        return jsonify({"files": files})
+
+    data = request.get_json() or {}
+    session_id = (data.get("session_id") or request.args.get("session_id") or "").strip()
+    filename = (data.get("filename") or request.args.get("filename") or "").strip()
+
+    if not session_id:
+        return jsonify({"error": "Thiếu mã phiên (session_id)."}), 400
+
+    coll = get_user_vector_db()
+    try:
+        session_dir = os.path.join(USER_UPLOADS_DIR, session_id)
+        if filename:
+            coll.delete(where={"$and": [{"session_id": session_id}, {"filename": filename}]})
+            target_file = os.path.join(session_dir, filename)
+            extracted_json = os.path.join(session_dir, f"{os.path.splitext(filename)[0]}_extracted.json")
+            if os.path.exists(target_file):
+                try:
+                    os.remove(target_file)
+                except Exception:
+                    pass
+            if os.path.exists(extracted_json):
+                try:
+                    os.remove(extracted_json)
+                except Exception:
+                    pass
+        else:
+            coll.delete(where={"session_id": session_id})
+            if os.path.exists(session_dir):
+                shutil.rmtree(session_dir, ignore_errors=True)
+    except Exception as e:
+        print(f"[!] Delete session doc error: {e}")
+
+    files = get_session_uploaded_files(session_id)
+    return jsonify({"status": "success", "files": files})
+
+
+@app.route("/api/upload-voice", methods=["POST"])
+def upload_voice():
+    """Nhận file âm thanh ghi âm từ client và lưu trữ để phát lại kiểu Messenger."""
+    if "audio" not in request.files:
+        return jsonify({"error": "Không tìm thấy dữ liệu âm thanh."}), 400
+
+    file = request.files["audio"]
+    if not file or file.filename == "":
+        return jsonify({"error": "File âm thanh rỗng."}), 400
+
+    filename = file.filename or "recording.webm"
+    ext = "webm"
+    if "." in filename:
+        ext = filename.rsplit(".", 1)[-1].lower()
+    if ext not in ["webm", "wav", "mp3", "ogg", "m4a"]:
+        ext = "webm"
+
+    timestamp = int(time.time() * 1000)
+    unique_id = uuid.uuid4().hex[:8]
+    saved_filename = f"voice_{timestamp}_{unique_id}.{ext}"
+    filepath = os.path.join(VOICE_UPLOAD_DIR, saved_filename)
+
+    try:
+        file.save(filepath)
+        audio_url = f"/static/voice_uploads/{saved_filename}"
+        return jsonify({
+            "status": "success",
+            "audio_url": audio_url,
+            "filename": saved_filename
+        })
+    except Exception as e:
+        print(f"[!] Lỗi khi lưu file ghi âm: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tts", methods=["POST"])
+def text_to_speech():
+    """Tạo âm thanh đọc câu trả lời tiếng Việt đồng nhất (Edge-TTS + gTTS fallback)."""
+    data = request.get_json() or {}
+    text = (data.get("text") or "").strip()
+    voice = (data.get("voice") or "vi-VN-HoaiMyNeural").strip()
+
+    if not text:
+        return jsonify({"error": "Vui lòng cung cấp văn bản cần đọc."}), 400
+
+    result = voice_service.generate_speech(text=text, voice=voice)
+    if "error" in result:
+        return jsonify(result), 500
+    return jsonify(result)
+
+
+@app.route("/api/stt", methods=["POST"])
+def speech_to_text():
+    """Nhận diện giọng nói tiếng Việt bằng Google Gemini Audio API (STT Fallback)."""
+    if "audio" not in request.files:
+        return jsonify({"error": "Không tìm thấy file âm thanh."}), 400
+
+    file = request.files["audio"]
+    custom_api_key = request.form.get("api_key", "").strip()
+
+    try:
+        audio_bytes = file.read()
+        mime_type = file.mimetype or "audio/webm"
+        transcript = voice_service.transcribe_audio_gemini(
+            audio_bytes=audio_bytes,
+            mime_type=mime_type,
+            api_key=custom_api_key or API_KEY
+        )
+        return jsonify({"status": "success", "transcript": transcript})
+    except Exception as e:
+        print(f"[!] STT Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/chat", methods=["POST"])
 def chat():
     data = request.get_json() or {}
     question = (data.get("question") or data.get("message") or "").strip()
+    session_id = (data.get("session_id") or "").strip()
+    scope = (data.get("scope") or "hybrid").strip().lower()
     history = data.get("history", [])
     custom_api_key = (data.get("api_key") or data.get("custom_api_key") or "").strip()
     preferred_model = (data.get("model") or data.get("preferred_model") or "").strip()
-    top_k = int(data.get("top_k") or 3)
+    top_k = int(data.get("top_k") or 4)
 
     if not question:
         return jsonify({"error": "Vui lòng nhập câu hỏi."}), 400
 
-    docs = smart_query_knowledge_base(question, n_results=top_k, custom_api_key=custom_api_key)
+    user_files = get_session_uploaded_files(session_id) if session_id else []
+    has_user_files = len(user_files) > 0
+    effective_scope = scope if has_user_files else "ptit_only"
 
-    context_parts = []
-    for i, d in enumerate(docs, start=1):
-        context_parts.append(f"--- [TÀI LIỆU {i}] ---\n{d['content']}")
-    context_str = "\n\n".join(context_parts) if context_parts else "Không tìm thấy dữ liệu trực tiếp."
+    user_docs = []
+    ptit_docs = []
+
+    # Phát hiện các câu hỏi dùng đại từ chỉ định ("môn học này", "tài liệu này"...)
+    q_lower = question.lower()
+    is_referential = any(k in q_lower for k in [
+        "môn học này", "môn này", "học phần này", "tài liệu này", "file này",
+        "bài này", "nội dung này", "chủ đề này", "kiến thức này", "giáo trình này",
+        "đề cương này", "trong file", "trong tài liệu", "tài liệu vừa", "file vừa",
+        "môn nào", "ngành nào", "chương trình nào"
+    ])
+    user_topics = extract_user_doc_topics(session_id) if has_user_files else []
+
+    ptit_search_query = question
+    if has_user_files and is_referential and user_topics:
+        # Bổ sung từ khóa của tài liệu vào câu truy vấn tra cứu PTIT
+        ptit_search_query = f"{question} {' '.join(user_topics)}"
+
+    if effective_scope == "user_only":
+        user_docs = query_user_documents(question, session_id, n_results=top_k, custom_api_key=custom_api_key)
+    elif effective_scope == "ptit_only":
+        ptit_docs = smart_query_knowledge_base(question, n_results=top_k, custom_api_key=custom_api_key)
+    else:  # hybrid: Quota Retrieval (4 user chunks + 4 ptit chunks)
+        user_docs = query_user_documents(question, session_id, n_results=4, custom_api_key=custom_api_key)
+        ptit_docs = smart_query_knowledge_base(ptit_search_query, n_results=4, custom_api_key=custom_api_key)
+
+    context_sections = []
+    if user_docs:
+        u_parts = [f"--- [{d['filename']} - Trang {d['page']}] ---\n{d['content']}" for d in user_docs]
+        context_sections.append("=== [TÀI LIỆU DO NGƯỜI DÙNG TẢI LÊN] ===\n" + "\n\n".join(u_parts))
+
+    if ptit_docs:
+        p_parts = [f"--- [TÀI LIỆU PTIT {i}] ---\n{d['content']}" for i, d in enumerate(ptit_docs, start=1)]
+        context_sections.append("=== [CƠ SỞ DỮ LIỆU CHÍNH THỨC PTIT] ===\n" + "\n\n".join(p_parts))
+
+    context_str = "\n\n".join(context_sections) if context_sections else "Không tìm thấy dữ liệu trực tiếp."
 
     answer, model_used, error_msg = generate_llm_answer(
         question=question,
         context_str=context_str,
         custom_api_key=custom_api_key,
         preferred_model=preferred_model,
-        history=history
+        history=history,
+        has_user_docs=bool(user_docs),
+        user_files=user_files
     )
 
     if not answer:
         print(f"[!] LLM không phản hồi ({error_msg}), chuyển sang chế độ dự phòng an toàn...")
-        answer = safe_fallback_answer(question, docs)
+        answer = safe_fallback_answer(question, ptit_docs or user_docs)
         model_used = "PTIT Safe Engine (Dự phòng)"
 
     clean_answer = clean_llm_response(answer)
+    referenced_files = [f["filename"] for f in user_files] if user_docs else []
     return jsonify({
         "answer": clean_answer,
         "model_used": model_used,
+        "scope_used": effective_scope,
+        "referenced_files": referenced_files,
         "sources": []
     })
 
 
 @app.route("/api/reset", methods=["POST"])
 def reset():
-    return jsonify({"status": "success", "message": "Đã làm mới phiên hội thoại."})
+    data = request.get_json() or {}
+    session_id = (data.get("session_id") or "").strip()
+    if session_id:
+        try:
+            coll = get_user_vector_db()
+            coll.delete(where={"session_id": session_id})
+        except Exception:
+            pass
+    return jsonify({"status": "success", "message": "Đã làm mới phiên hội thoại và dọn dẹp tài liệu tải lên."})
 
 
 def free_port(port):

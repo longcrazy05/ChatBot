@@ -37,3 +37,10 @@ desktop.ini
 
 # Logs & temp files
 *.log
+
+*feature.md
+# User uploaded documents & audio
+user_uploads/
+static/voice_uploads/
+static/audio_cache/
+*.mp3

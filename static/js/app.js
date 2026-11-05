@@ -58,10 +58,16 @@ class PTITChatApp {
             apiKey: "",
             model: "gemini-3.1-flash-lite",
             topK: 4,
-            autoVoice: false
+            autoVoice: false,
+            voice: "vi-VN-HoaiMyNeural",
+            voiceSpeed: 1.0
         };
+        this.currentBotAudio = null;
+        this.currentBotSpeakBtn = null;
         this.currentCategory = "all";
         this.isProcessing = false;
+        this.currentScope = "ptit_only";
+        this.uploadedFiles = [];
         this.currentUtterance = null;
         this.recognition = null;
 
@@ -78,6 +84,8 @@ class PTITChatApp {
         this.initSpeechRecognition();
         this.fetchKBStatus();
         this.renderCategorySuggestions();
+        this.initScopeSelector();
+        this.initFileUpload();
 
         // Start or load first session
         if (this.sessions.length > 0) {
@@ -132,6 +140,32 @@ class PTITChatApp {
         this.exportChatBtn = document.getElementById("exportChatBtn");
         this.clearCurrentChatBtn = document.getElementById("clearCurrentChatBtn");
 
+        // Document Upload & Scope Switcher
+        this.fileUploadInput = document.getElementById("fileUploadInput");
+        this.uploadFileBtn = document.getElementById("uploadFileBtn");
+        this.uploadedFilesBar = document.getElementById("uploadedFilesBar");
+        this.uploadedFilesList = document.getElementById("uploadedFilesList");
+        this.uploadStatusIndicator = document.getElementById("uploadStatusIndicator");
+        this.uploadStatusText = document.getElementById("uploadStatusText");
+        this.scopeSelectorWrapper = document.getElementById("scopeSelectorWrapper");
+        this.scopeSelectorBtn = document.getElementById("scopeSelectorBtn");
+        this.scopeBtnLabel = document.getElementById("scopeBtnLabel");
+        this.scopePopupCard = document.getElementById("scopePopupCard");
+        this.scopeDocsCountBadge = document.getElementById("scopeDocsCountBadge");
+        this.openUploadedDocsModalBtn = document.getElementById("openUploadedDocsModalBtn");
+        this.openDocsModalFromBarBtn = document.getElementById("openDocsModalFromBarBtn");
+        this.navDocsCountText = document.getElementById("navDocsCountText");
+
+        // Uploaded Docs Side Panel
+        this.docsSidePanel = document.getElementById("docsSidePanel");
+        this.docsSidePanelBackdrop = document.getElementById("docsSidePanelBackdrop");
+        this.closeDocsSidePanelBtn = document.getElementById("closeDocsSidePanelBtn");
+        this.closeDocsSidePanelFooterBtn = document.getElementById("closeDocsSidePanelFooterBtn");
+        this.sidePanelDocsList = document.getElementById("sidePanelDocsList");
+        this.sidePanelDocsCountBadge = document.getElementById("sidePanelDocsCountBadge");
+        this.sidePanelUploadBtn = document.getElementById("sidePanelUploadBtn");
+        this.sidePanelClearAllBtn = document.getElementById("sidePanelClearAllBtn");
+
         // Modals
         this.kbModal = document.getElementById("kbModal");
         this.openKbModalBtn = document.getElementById("openKbModalBtn");
@@ -152,6 +186,8 @@ class PTITChatApp {
         this.topKInput = document.getElementById("topKInput");
         this.topKValue = document.getElementById("topKValue");
         this.autoVoiceToggle = document.getElementById("autoVoiceToggle");
+        this.voiceSelect = document.getElementById("voiceSelect");
+        this.voiceSpeedSelect = document.getElementById("voiceSpeedSelect");
 
         this.sourceModal = document.getElementById("sourceModal");
         this.sourceModalTitle = document.getElementById("sourceModalTitle");
@@ -242,6 +278,15 @@ class PTITChatApp {
 
         // Voice Input
         if (this.voiceInputBtn) this.voiceInputBtn.addEventListener("click", () => this.toggleVoiceInput());
+
+        // Uploaded Docs Side Panel Events
+        if (this.openUploadedDocsModalBtn) this.openUploadedDocsModalBtn.addEventListener("click", () => this.openSidePanel());
+        if (this.openDocsModalFromBarBtn) this.openDocsModalFromBarBtn.addEventListener("click", () => this.openSidePanel());
+        if (this.closeDocsSidePanelBtn) this.closeDocsSidePanelBtn.addEventListener("click", () => this.closeSidePanel());
+        if (this.closeDocsSidePanelFooterBtn) this.closeDocsSidePanelFooterBtn.addEventListener("click", () => this.closeSidePanel());
+        if (this.docsSidePanelBackdrop) this.docsSidePanelBackdrop.addEventListener("click", () => this.closeSidePanel());
+        if (this.sidePanelUploadBtn) this.sidePanelUploadBtn.addEventListener("click", () => this.fileUploadInput && this.fileUploadInput.click());
+        if (this.sidePanelClearAllBtn) this.sidePanelClearAllBtn.addEventListener("click", () => this.clearAllSessionDocs());
 
         // Close modals on backdrop click
         [this.kbModal, this.settingsModal, this.sourceModal].filter(Boolean).forEach(modal => {
@@ -427,6 +472,8 @@ class PTITChatApp {
         this.topKInput.value = this.settings.topK || 4;
         this.topKValue.textContent = this.topKInput.value;
         this.autoVoiceToggle.checked = !!this.settings.autoVoice;
+        if (this.voiceSelect) this.voiceSelect.value = this.settings.voice || "vi-VN-HoaiMyNeural";
+        if (this.voiceSpeedSelect) this.voiceSpeedSelect.value = String(this.settings.voiceSpeed || 1.0);
         this.settingsModal.classList.add("active");
     }
 
@@ -435,6 +482,8 @@ class PTITChatApp {
         this.settings.model = this.modelSelect.value;
         this.settings.topK = parseInt(this.topKInput.value, 10) || 4;
         this.settings.autoVoice = this.autoVoiceToggle.checked;
+        if (this.voiceSelect) this.settings.voice = this.voiceSelect.value;
+        if (this.voiceSpeedSelect) this.settings.voiceSpeed = parseFloat(this.voiceSpeedSelect.value) || 1.0;
 
         localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
         if (this.modelBadgeDisplay) {
@@ -459,6 +508,8 @@ class PTITChatApp {
         this.topKInput.value = 4;
         this.topKValue.textContent = "4";
         this.autoVoiceToggle.checked = false;
+        if (this.voiceSelect) this.voiceSelect.value = "vi-VN-HoaiMyNeural";
+        if (this.voiceSpeedSelect) this.voiceSpeedSelect.value = "1.0";
         localStorage.removeItem("ptit_chat_settings");
         this.modelBadgeDisplay.textContent = "gemini-3.1-flash-lite";
         if (this.updateQuickModelUI) {
@@ -520,6 +571,9 @@ class PTITChatApp {
         };
         this.sessions.unshift(newSession);
         this.saveSessions();
+        this.uploadedFiles = [];
+        this.renderUploadedFiles([]);
+        this.setScope("ptit_only");
         this.switchSession(newSession.id);
         if (window.innerWidth <= 768) {
             this.sidebar.classList.remove("open");
@@ -527,6 +581,12 @@ class PTITChatApp {
     }
 
     switchSession(sessionId) {
+        if (this.currentBotAudio) {
+            this.currentBotAudio.pause();
+            this.currentBotAudio = null;
+        }
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+
         this.currentSessionId = sessionId;
         const session = this.sessions.find(s => s.id === sessionId);
         if (!session) return;
@@ -534,10 +594,16 @@ class PTITChatApp {
         this.currentChatTitle.textContent = session.title;
         this.renderMessages(session.messages);
         this.renderHistoryList();
+        this.fetchSessionDocs(sessionId);
     }
 
     deleteSession(sessionId, event) {
         if (event) event.stopPropagation();
+        fetch("/api/session-docs", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: sessionId })
+        }).catch(() => {});
         this.sessions = this.sessions.filter(s => s.id !== sessionId);
         this.saveSessions();
 
@@ -553,12 +619,20 @@ class PTITChatApp {
     clearCurrentChat() {
         const session = this.sessions.find(s => s.id === this.currentSessionId);
         if (session) {
+            fetch("/api/session-docs", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: this.currentSessionId })
+            }).catch(() => {});
+            this.uploadedFiles = [];
+            this.renderUploadedFiles([]);
+            this.setScope("ptit_only");
             session.messages = [];
             session.title = "Đoạn chat mới";
             this.currentChatTitle.textContent = session.title;
             this.saveSessions();
             this.renderMessages([]);
-            this.showToast("Đã xóa nội dung đoạn chat hiện tại.", "info");
+            this.showToast("Đã xóa nội dung đoạn chat và tài liệu tải lên.", "info");
         }
     }
 
@@ -625,8 +699,39 @@ class PTITChatApp {
         bubbleDiv.className = "msg-bubble";
 
         if (msg.role === "user") {
-            bubbleDiv.textContent = msg.content;
+            if (msg.audioUrl || msg.isVoiceMessage) {
+                const voicePlayer = this.createMessengerVoicePlayer(msg);
+                bubbleDiv.appendChild(voicePlayer);
+
+                if (msg.content) {
+                    const transcriptDiv = document.createElement("div");
+                    transcriptDiv.className = "voice-bubble-transcript";
+                    transcriptDiv.innerHTML = `<i class="fa-solid fa-quote-left"></i> <span>${this.escapeHtml(msg.content)}</span>`;
+                    bubbleDiv.appendChild(transcriptDiv);
+                }
+            } else {
+                bubbleDiv.textContent = msg.content;
+            }
+            if (msg.attachedFiles && msg.attachedFiles.length > 0) {
+                const attachBox = document.createElement("div");
+                attachBox.className = "msg-attached-files";
+                attachBox.innerHTML = `<span class="msg-attach-label"><i class="fa-solid fa-paperclip"></i> Đã đính kèm:</span>` +
+                    msg.attachedFiles.map(fn => {
+                        const ext = fn.split(".").pop().toLowerCase();
+                        let iconClass = "fa-file-lines";
+                        if (ext === "pdf") iconClass = "fa-file-pdf";
+                        else if (ext === "docx") iconClass = "fa-file-word";
+                        return `<span class="msg-file-chip"><i class="fa-solid ${iconClass}"></i> ${this.escapeHtml(fn)}</span>`;
+                    }).join("");
+                bubbleDiv.appendChild(attachBox);
+            }
         } else {
+            if (msg.referenced_files && msg.referenced_files.length > 0) {
+                const refBadge = document.createElement("div");
+                refBadge.className = "bot-msg-ref-badge";
+                refBadge.innerHTML = `<i class="fa-solid fa-file-circle-check"></i> <span>Dựa trên tài liệu: <strong>${msg.referenced_files.map(f => this.escapeHtml(f)).join(", ")}</strong></span>`;
+                wrapperDiv.appendChild(refBadge);
+            }
             // Render Bot Markdown with LaTeX cleanup
             let textToRender = msg.content || "";
             textToRender = textToRender.replace(/\$\s*\\ge(q)?\s*([^$]+)\$/g, "từ $2 trở lên");
@@ -749,14 +854,26 @@ class PTITChatApp {
     }
 
     // SUBMIT QUESTION
-    async handleSubmit() {
-        const text = this.userInput.value.trim();
+    async handleSubmit(customVoiceData = null) {
+        const text = (customVoiceData && customVoiceData.text) ? customVoiceData.text : this.userInput.value.trim();
         if (!text || this.isProcessing) return;
+
+        // Dừng giọng nói bot đang đọc nếu có
+        if (this.currentBotAudio) {
+            this.currentBotAudio.pause();
+            this.currentBotAudio = null;
+        }
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
 
         // Reset Textarea
         this.userInput.value = "";
         this.userInput.style.height = "38px";
         if (this.chatForm) this.chatForm.classList.remove("multiline");
+
+        // Ẩn thanh tài liệu khỏi ô chat sau khi gửi câu hỏi (tài liệu vẫn lưu trong phiên)
+        if (this.uploadedFilesBar) {
+            this.uploadedFilesBar.style.display = "none";
+        }
 
         let currentSession = this.sessions.find(s => s.id === this.currentSessionId);
         if (!currentSession) {
@@ -770,8 +887,19 @@ class PTITChatApp {
             this.currentChatTitle.textContent = currentSession.title;
         }
 
-        // Add User Message
-        const userMsg = { role: "user", content: text, timestamp: new Date().toISOString() };
+        // Add User Message with attached files
+        const attachedFiles = (this.uploadedFiles && this.uploadedFiles.length > 0)
+            ? this.uploadedFiles.map(f => f.filename)
+            : [];
+        const userMsg = {
+            role: "user",
+            content: text,
+            attachedFiles: attachedFiles,
+            audioUrl: customVoiceData ? customVoiceData.audioUrl : null,
+            audioDuration: customVoiceData ? customVoiceData.audioDuration : 0,
+            isVoiceMessage: !!(customVoiceData && customVoiceData.audioUrl),
+            timestamp: new Date().toISOString()
+        };
         currentSession.messages.push(userMsg);
         this.saveSessions();
         this.appendMessageToDOM(userMsg, true);
@@ -789,6 +917,8 @@ class PTITChatApp {
         try {
             const payload = {
                 question: text,
+                session_id: this.currentSessionId,
+                scope: this.currentScope,
                 api_key: this.settings.apiKey,
                 model: this.settings.model,
                 top_k: this.settings.topK,
@@ -826,6 +956,8 @@ class PTITChatApp {
                 content: data.answer || "Không nhận được phản hồi từ hệ thống.",
                 sources: data.sources || [],
                 model_used: data.model_used,
+                scope_used: data.scope_used || this.currentScope,
+                referenced_files: data.referenced_files || [],
                 timestamp: new Date().toISOString()
             };
 
@@ -913,55 +1045,173 @@ class PTITChatApp {
         }
     }
 
-    // SPEECH SYNTHESIS (TTS)
-    toggleSpeech(text, btnElement) {
-        if (!('speechSynthesis' in window)) {
-            this.showToast("Trình duyệt không hỗ trợ đọc giọng nói Text-to-Speech.", "info");
-            return;
-        }
-
-        if (window.speechSynthesis.speaking) {
-            window.speechSynthesis.cancel();
-            document.querySelectorAll(".msg-action-btn.active").forEach(b => b.classList.remove("active"));
+    // SPEECH SYNTHESIS (TTS) - ĐỒNG NHẤT 100% CÁC TRÌNH DUYỆT (EDGE-TTS + gTTS + CACHE)
+    async toggleSpeech(text, btnElement) {
+        // Dừng âm thanh đang phát nếu người dùng bấm lại nút
+        if (this.currentBotAudio) {
+            this.currentBotAudio.pause();
+            this.currentBotAudio = null;
+            document.querySelectorAll(".msg-action-btn.active").forEach(b => {
+                b.classList.remove("active");
+                const span = b.querySelector("span");
+                if (span) span.textContent = "Đọc";
+                const icon = b.querySelector("i");
+                if (icon) icon.className = "fa-solid fa-volume-high";
+            });
             if (this.currentUtteranceText === text) {
                 this.currentUtteranceText = null;
                 return;
             }
         }
 
-        this.speakText(text, btnElement);
+        if (window.speechSynthesis && window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+            document.querySelectorAll(".msg-action-btn.active").forEach(b => {
+                b.classList.remove("active");
+                const span = b.querySelector("span");
+                if (span) span.textContent = "Đọc";
+                const icon = b.querySelector("i");
+                if (icon) icon.className = "fa-solid fa-volume-high";
+            });
+            if (this.currentUtteranceText === text) {
+                this.currentUtteranceText = null;
+                return;
+            }
+        }
+
+        await this.speakText(text, btnElement);
     }
 
-    speakText(text, btnElement = null) {
-        if (!('speechSynthesis' in window)) return;
-        window.speechSynthesis.cancel();
+    async speakText(text, btnElement = null) {
+        if (!text) return;
 
-        // Strip Markdown tags for smooth voice reading
+        // Dừng các âm thanh cũ
+        if (this.currentBotAudio) {
+            this.currentBotAudio.pause();
+            this.currentBotAudio = null;
+        }
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+
+        const selectedVoice = this.settings.voice || "vi-VN-HoaiMyNeural";
+        const selectedSpeed = parseFloat(this.settings.voiceSpeed || 1.0);
+
+        if (btnElement) {
+            btnElement.classList.add("active");
+            const span = btnElement.querySelector("span");
+            if (span) span.textContent = "Tải...";
+            const icon = btnElement.querySelector("i");
+            if (icon) icon.className = "fa-solid fa-spinner fa-spin";
+        }
+
+        this.currentUtteranceText = text;
+
+        try {
+            // 1. Gọi Backend TTS (Edge-TTS / gTTS + Cache MD5)
+            const resp = await fetch("/api/tts", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    text: text,
+                    voice: selectedVoice
+                })
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.audio_url) {
+                    const audio = new Audio(data.audio_url);
+                    audio.playbackRate = selectedSpeed;
+                    this.currentBotAudio = audio;
+                    this.currentBotSpeakBtn = btnElement;
+
+                    if (btnElement) {
+                        const span = btnElement.querySelector("span");
+                        if (span) span.textContent = "Dừng";
+                        const icon = btnElement.querySelector("i");
+                        if (icon) icon.className = "fa-solid fa-volume-high";
+                    }
+
+                    audio.addEventListener("ended", () => {
+                        if (btnElement) {
+                            btnElement.classList.remove("active");
+                            const span = btnElement.querySelector("span");
+                            if (span) span.textContent = "Đọc";
+                            const icon = btnElement.querySelector("i");
+                            if (icon) icon.className = "fa-solid fa-volume-high";
+                        }
+                        this.currentBotAudio = null;
+                        this.currentBotSpeakBtn = null;
+                        this.currentUtteranceText = null;
+                    });
+
+                    audio.addEventListener("error", (err) => {
+                        console.warn("[TTS] Lỗi phát file audio từ server, chuyển sang fallback Web Speech:", err);
+                        this.fallbackClientSpeech(text, btnElement, selectedSpeed);
+                    });
+
+                    await audio.play();
+                    return;
+                }
+            }
+
+            // Nếu Backend lỗi -> Chuyển sang fallback Web Speech API
+            console.warn("[TTS] Backend trả về lỗi, chuyển sang fallback Web Speech.");
+            this.fallbackClientSpeech(text, btnElement, selectedSpeed);
+
+        } catch (fetchErr) {
+            console.warn("[TTS] Không kết nối được API /api/tts, chuyển sang fallback Web Speech:", fetchErr);
+            this.fallbackClientSpeech(text, btnElement, selectedSpeed);
+        }
+    }
+
+    fallbackClientSpeech(text, btnElement, speed = 1.0) {
+        if (!('speechSynthesis' in window)) {
+            if (btnElement) {
+                btnElement.classList.remove("active");
+                const span = btnElement.querySelector("span");
+                if (span) span.textContent = "Đọc";
+                const icon = btnElement.querySelector("i");
+                if (icon) icon.className = "fa-solid fa-volume-high";
+            }
+            this.showToast("Không thể phát giọng nói trên thiết bị này.", "error");
+            return;
+        }
+
         const plainText = text
             .replace(/[#*_`~\[\]\(\)>|]/g, " ")
+            .replace(/https?:\/\/\S+/g, " ")
             .replace(/\s+/g, " ")
             .trim();
 
         const utterance = new SpeechSynthesisUtterance(plainText);
         utterance.lang = "vi-VN";
-        utterance.rate = 1.0;
+        utterance.rate = speed;
 
-        // Try to pick a Vietnamese voice
         const voices = window.speechSynthesis.getVoices();
         const viVoice = voices.find(v => v.lang.includes("vi") || v.name.includes("Vietnamese"));
-        if (viVoice) utterance.voice = viVoice;
+        if (viVoice) {
+            utterance.voice = viVoice;
+        } else {
+            console.warn("Không tìm thấy gói giọng tiếng Việt trong trình duyệt client.");
+        }
 
         if (btnElement) {
             btnElement.classList.add("active");
-            btnElement.querySelector("span").textContent = "Dừng";
+            const span = btnElement.querySelector("span");
+            if (span) span.textContent = "Dừng";
+            const icon = btnElement.querySelector("i");
+            if (icon) icon.className = "fa-solid fa-volume-high";
         }
-
-        this.currentUtteranceText = text;
 
         utterance.onend = () => {
             if (btnElement) {
                 btnElement.classList.remove("active");
-                btnElement.querySelector("span").textContent = "Đọc";
+                const span = btnElement.querySelector("span");
+                if (span) span.textContent = "Đọc";
+                const icon = btnElement.querySelector("i");
+                if (icon) icon.className = "fa-solid fa-volume-high";
             }
             this.currentUtteranceText = null;
         };
@@ -969,7 +1219,10 @@ class PTITChatApp {
         utterance.onerror = () => {
             if (btnElement) {
                 btnElement.classList.remove("active");
-                btnElement.querySelector("span").textContent = "Đọc";
+                const span = btnElement.querySelector("span");
+                if (span) span.textContent = "Đọc";
+                const icon = btnElement.querySelector("i");
+                if (icon) icon.className = "fa-solid fa-volume-high";
             }
             this.currentUtteranceText = null;
         };
@@ -977,52 +1230,343 @@ class PTITChatApp {
         window.speechSynthesis.speak(utterance);
     }
 
-    // SPEECH RECOGNITION (STT)
+    // =========================================================================
+    // MESSENGER-STYLE VOICE PLAYER & RECORDER
+    // =========================================================================
+    createMessengerVoicePlayer(msg) {
+        const player = document.createElement("div");
+        player.className = "messenger-voice-player";
+
+        // Play/Pause button
+        const playBtn = document.createElement("button");
+        playBtn.type = "button";
+        playBtn.className = "voice-bubble-play-btn";
+        playBtn.setAttribute("title", "Nghe lại câu hỏi");
+        playBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+
+        // Waveform container
+        const waveWrap = document.createElement("div");
+        waveWrap.className = "voice-bubble-wave-wrap";
+
+        const waveBars = document.createElement("div");
+        waveBars.className = "voice-bubble-wave-bars";
+
+        // Natural organic soundwave heights
+        const barHeights = [25, 45, 75, 95, 60, 40, 80, 100, 70, 50, 85, 90, 65, 40, 70, 95, 60, 35, 55, 80, 50, 30];
+        const barElements = [];
+        barHeights.forEach(h => {
+            const bar = document.createElement("span");
+            bar.className = "voice-bar";
+            bar.style.height = `${h}%`;
+            waveBars.appendChild(bar);
+            barElements.push(bar);
+        });
+
+        const progressBar = document.createElement("div");
+        progressBar.className = "voice-bubble-progress";
+
+        waveWrap.appendChild(waveBars);
+        waveWrap.appendChild(progressBar);
+
+        // Duration label
+        const durationLabel = document.createElement("span");
+        durationLabel.className = "voice-bubble-duration";
+        const totalSec = msg.audioDuration || 0;
+        const formatTime = (sec) => {
+            const m = Math.floor(sec / 60);
+            const s = Math.floor(sec % 60);
+            return `${m}:${s < 10 ? '0' : ''}${s}`;
+        };
+        durationLabel.textContent = totalSec > 0 ? formatTime(totalSec) : "0:00";
+
+        // Download link
+        const downloadLink = document.createElement("a");
+        downloadLink.className = "voice-bubble-dl-btn";
+        downloadLink.href = msg.audioUrl || "#";
+        downloadLink.download = `voice_question_${Date.now()}.webm`;
+        downloadLink.title = "Tải file âm thanh (.mp3 / .webm)";
+        downloadLink.innerHTML = '<i class="fa-solid fa-arrow-down-to-bracket"></i>';
+
+        player.appendChild(playBtn);
+        player.appendChild(waveWrap);
+        player.appendChild(durationLabel);
+        player.appendChild(downloadLink);
+
+        // Audio Object logic
+        const audio = new Audio(msg.audioUrl);
+
+        audio.addEventListener("loadedmetadata", () => {
+            if (!totalSec && audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+                durationLabel.textContent = formatTime(audio.duration);
+            }
+        });
+
+        playBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (this.activeVoiceAudio && this.activeVoiceAudio !== audio) {
+                this.activeVoiceAudio.pause();
+                this.activeVoiceAudio.currentTime = 0;
+                if (this.activeVoicePlayBtn) {
+                    this.activeVoicePlayBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+                    this.activeVoicePlayBtn.classList.remove("playing");
+                }
+            }
+
+            if (audio.paused) {
+                audio.play().then(() => {
+                    playBtn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+                    playBtn.classList.add("playing");
+                    this.activeVoiceAudio = audio;
+                    this.activeVoicePlayBtn = playBtn;
+                }).catch(err => {
+                    console.warn("Audio play error:", err);
+                });
+            } else {
+                audio.pause();
+                playBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+                playBtn.classList.remove("playing");
+            }
+        });
+
+        audio.addEventListener("timeupdate", () => {
+            const cur = audio.currentTime;
+            const dur = audio.duration || totalSec || 1;
+            const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
+            progressBar.style.width = `${pct}%`;
+            durationLabel.textContent = formatTime(cur);
+
+            // Highlight wave bars
+            const activeBarIdx = Math.floor((pct / 100) * barElements.length);
+            barElements.forEach((bar, idx) => {
+                if (idx <= activeBarIdx) bar.classList.add("active");
+                else bar.classList.remove("active");
+            });
+        });
+
+        audio.addEventListener("ended", () => {
+            playBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+            playBtn.classList.remove("playing");
+            progressBar.style.width = "0%";
+            durationLabel.textContent = formatTime(totalSec || audio.duration || 0);
+            barElements.forEach(bar => bar.classList.remove("active"));
+            if (this.activeVoiceAudio === audio) {
+                this.activeVoiceAudio = null;
+                this.activeVoicePlayBtn = null;
+            }
+        });
+
+        // Scrubbing on waveform click
+        waveWrap.addEventListener("click", (e) => {
+            const rect = waveWrap.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const pct = Math.min(1, Math.max(0, clickX / rect.width));
+            const dur = audio.duration || totalSec;
+            if (dur && !isNaN(dur) && isFinite(dur)) {
+                audio.currentTime = pct * dur;
+                progressBar.style.width = `${pct * 100}%`;
+            }
+        });
+
+        return player;
+    }
+
+    // SPEECH RECOGNITION (STT) & MEDIA RECORDER
     initSpeechRecognition() {
+        this.mediaRecorder = null;
+        this.audioChunks = [];
+        this.isRecordingVoice = false;
+        this.recordStartTime = 0;
+        this.voiceTranscript = "";
+        this.audioStream = null;
+        this.activeVoiceAudio = null;
+        this.activeVoicePlayBtn = null;
+
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRec) {
             this.recognition = new SpeechRec();
             this.recognition.lang = "vi-VN";
             this.recognition.continuous = false;
-            this.recognition.interimResults = false;
+            this.recognition.interimResults = true;
 
             this.recognition.onstart = () => {
-                this.voiceInputBtn.classList.add("listening");
-                this.voiceInputBtn.title = "Đang lắng nghe giọng nói của bạn...";
-                this.showToast("Đang lắng nghe... Hãy nói câu hỏi của bạn!", "info");
+                // Recording status handled in startVoiceRecording
             };
 
             this.recognition.onresult = (event) => {
-                const speechResult = event.results[0][0].transcript;
-                this.userInput.value = speechResult;
+                let liveResult = "";
+                for (let i = 0; i < event.results.length; i++) {
+                    liveResult += event.results[i][0].transcript;
+                }
+                this.voiceTranscript = liveResult;
+                this.userInput.value = liveResult;
                 this.autoGrowTextarea();
-                this.handleSubmit();
+
+                // Dừng ghi âm và gửi khi nhận kết quả hoàn chỉnh
+                if (event.results[0] && event.results[0].isFinal) {
+                    this.stopVoiceRecordingAndSend(liveResult);
+                }
             };
 
             this.recognition.onerror = (event) => {
-                console.warn("Speech recognition error:", event.error);
-                this.voiceInputBtn.classList.remove("listening");
-                this.showToast("Không nhận diện được giọng nói hoặc micro bị từ chối.", "error");
+                console.warn("Speech recognition warning/error:", event.error);
+                if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+                    this.showToast("Microphone bị từ chối truy cập.", "error");
+                    this.stopVoiceRecordingAndSend();
+                }
             };
 
             this.recognition.onend = () => {
-                this.voiceInputBtn.classList.remove("listening");
-                this.voiceInputBtn.title = "Nhập câu hỏi bằng giọng nói";
+                if (this.isRecordingVoice && this.voiceTranscript) {
+                    this.stopVoiceRecordingAndSend(this.voiceTranscript);
+                }
             };
         } else {
-            this.voiceInputBtn.style.display = "none";
+            console.log("SpeechRecognition not natively supported, MediaRecorder fallback active.");
         }
     }
 
-    toggleVoiceInput() {
-        if (!this.recognition) {
-            this.showToast("Trình duyệt không hỗ trợ nhận diện giọng nói tiếng Việt.", "info");
+    async toggleVoiceInput() {
+        if (this.isRecordingVoice) {
+            // Đang ghi âm -> Bấm lần 2 để dừng và gửi ngay
+            await this.stopVoiceRecordingAndSend();
+        } else {
+            // Bắt đầu ghi âm
+            await this.startVoiceRecording();
+        }
+    }
+
+    async startVoiceRecording() {
+        if (this.isRecordingVoice) return;
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            this.showToast("Trình duyệt không hỗ trợ ghi âm Microphone.", "error");
             return;
         }
+
         try {
-            this.recognition.start();
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.audioStream = stream;
+
+            let mimeType = "audio/webm";
+            if (!window.MediaRecorder || !MediaRecorder.isTypeSupported("audio/webm")) {
+                if (window.MediaRecorder && MediaRecorder.isTypeSupported("audio/mp4")) {
+                    mimeType = "audio/mp4";
+                } else {
+                    mimeType = "";
+                }
+            }
+
+            this.mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+            this.audioChunks = [];
+
+            this.mediaRecorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) {
+                    this.audioChunks.push(e.data);
+                }
+            };
+
+            this.recordStartTime = Date.now();
+            this.isRecordingVoice = true;
+            this.voiceTranscript = "";
+            this.mediaRecorder.start();
+
+            if (this.voiceInputBtn) {
+                this.voiceInputBtn.classList.add("listening");
+                this.voiceInputBtn.title = "Đang ghi âm... Bấm lại mic để gửi ngay!";
+            }
+            this.showToast("🎙️ Đang ghi âm câu hỏi của bạn... Hãy nói!", "info");
+
+            // Kích hoạt SpeechRecognition song song nếu hỗ trợ
+            if (this.recognition) {
+                try {
+                    this.recognition.start();
+                } catch (e) {
+                    console.warn("SpeechRec start error:", e);
+                }
+            }
+        } catch (err) {
+            console.error("Microphone access error:", err);
+            this.showToast("Không thể truy cập Microphone. Vui lòng cấp quyền micro.", "error");
+            this.isRecordingVoice = false;
+            if (this.voiceInputBtn) this.voiceInputBtn.classList.remove("listening");
+        }
+    }
+
+    async stopVoiceRecordingAndSend(forcedTranscript = null) {
+        if (!this.isRecordingVoice) return;
+        this.isRecordingVoice = false;
+
+        if (this.voiceInputBtn) {
+            this.voiceInputBtn.classList.remove("listening");
+            this.voiceInputBtn.title = "Nhập câu hỏi bằng giọng nói";
+        }
+
+        const durationMs = Date.now() - (this.recordStartTime || Date.now());
+        const durationSec = Math.max(1, Math.round(durationMs / 1000));
+
+        if (this.recognition) {
+            try { this.recognition.stop(); } catch (e) {}
+        }
+
+        if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") {
+            if (this.audioStream) {
+                this.audioStream.getTracks().forEach(t => t.stop());
+                this.audioStream = null;
+            }
+            const textToSend = forcedTranscript || this.voiceTranscript || this.userInput.value.trim();
+            if (textToSend) {
+                this.handleSubmit({ text: textToSend });
+            }
+            return;
+        }
+
+        const recorder = this.mediaRecorder;
+        const mimeType = recorder.mimeType || "audio/webm";
+
+        recorder.onstop = async () => {
+            if (this.audioStream) {
+                this.audioStream.getTracks().forEach(t => t.stop());
+                this.audioStream = null;
+            }
+
+            const audioBlob = new Blob(this.audioChunks, { type: mimeType });
+            const localBlobUrl = URL.createObjectURL(audioBlob);
+            let finalAudioUrl = localBlobUrl;
+
+            // Tải file lên backend /api/upload-voice để lưu trữ vĩnh viễn
+            try {
+                const formData = new FormData();
+                formData.append("audio", audioBlob, `voice_${Date.now()}.webm`);
+                const uploadResp = await fetch("/api/upload-voice", {
+                    method: "POST",
+                    body: formData
+                });
+                if (uploadResp.ok) {
+                    const resData = await uploadResp.json();
+                    if (resData.audio_url) {
+                        finalAudioUrl = resData.audio_url;
+                    }
+                }
+            } catch (upErr) {
+                console.warn("Upload voice audio error, using local blob:", upErr);
+            }
+
+            const textToSend = forcedTranscript || this.voiceTranscript || this.userInput.value.trim() || "Câu hỏi bằng giọng nói";
+            this.userInput.value = "";
+            this.autoGrowTextarea();
+
+            this.handleSubmit({
+                text: textToSend,
+                audioUrl: finalAudioUrl,
+                audioDuration: durationSec,
+                isVoiceMessage: true
+            });
+        };
+
+        try {
+            recorder.stop();
         } catch (e) {
-            this.recognition.stop();
+            console.warn("Error stopping media recorder:", e);
         }
     }
 
@@ -1085,6 +1629,336 @@ class PTITChatApp {
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
+    }
+
+
+    // ==============================================================================
+    // SCOPE SWITCHER & FILE UPLOAD MANAGEMENT
+    // ==============================================================================
+
+    initScopeSelector() {
+        if (!this.scopeSelectorBtn || !this.scopePopupCard) return;
+
+        this.scopeSelectorBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const isOpen = this.scopePopupCard.classList.contains("show");
+            document.querySelectorAll(".model-popup-card").forEach(p => p.classList.remove("show"));
+            if (isOpen) {
+                this.scopePopupCard.classList.remove("show");
+            } else {
+                this.scopePopupCard.classList.add("show");
+            }
+        });
+
+        this.scopePopupCard.querySelectorAll(".scope-popup-item").forEach(item => {
+            item.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const scope = item.getAttribute("data-scope");
+                this.setScope(scope);
+                this.scopePopupCard.classList.remove("show");
+            });
+        });
+
+        document.addEventListener("click", (e) => {
+            if (this.scopePopupCard && !this.scopeSelectorWrapper.contains(e.target)) {
+                this.scopePopupCard.classList.remove("show");
+            }
+        });
+    }
+
+    setScope(scope) {
+        this.currentScope = scope;
+        const labels = {
+            "hybrid": "Kết hợp (Hybrid)",
+            "user_only": "Chỉ tài liệu",
+            "ptit_only": "Chỉ PTIT"
+        };
+        if (this.scopeBtnLabel) {
+            this.scopeBtnLabel.textContent = labels[scope] || scope;
+        }
+        if (this.scopePopupCard) {
+            this.scopePopupCard.querySelectorAll(".scope-popup-item").forEach(item => {
+                item.classList.toggle("selected", item.getAttribute("data-scope") === scope);
+            });
+        }
+    }
+
+    initFileUpload() {
+        if (!this.uploadFileBtn || !this.fileUploadInput) return;
+
+        this.uploadFileBtn.addEventListener("click", () => {
+            this.fileUploadInput.click();
+        });
+
+        this.fileUploadInput.addEventListener("change", async (e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length === 0) return;
+            await this.uploadFiles(files);
+            this.fileUploadInput.value = "";
+        });
+    }
+
+    async uploadFiles(files) {
+        if (this.uploadedFiles.length + files.length > 3) {
+            this.showToast(`Mỗi phiên chỉ được tải tối đa 3 file. Hiện tại bạn đã có ${this.uploadedFiles.length} file.`, "error");
+            return;
+        }
+
+        for (const f of files) {
+            if (f.size > 5 * 1024 * 1024) {
+                this.showToast(`File '${f.name}' vượt quá 5MB. Vui lòng chọn file nhẹ hơn.`, "error");
+                return;
+            }
+            const ext = f.name.split(".").pop().toLowerCase();
+            if (!["pdf", "docx", "txt", "md"].includes(ext)) {
+                this.showToast(`File '${f.name}' không hợp lệ. Chỉ chấp nhận .pdf, .docx, .txt, .md.`, "error");
+                return;
+            }
+        }
+
+        if (this.uploadedFilesBar) this.uploadedFilesBar.style.display = "flex";
+        if (this.uploadStatusIndicator) {
+            this.uploadStatusIndicator.style.display = "inline-flex";
+            this.uploadStatusText.textContent = `Đang phân tích & tạo vector cho ${files.length} file...`;
+        }
+
+        const formData = new FormData();
+        formData.append("session_id", this.currentSessionId);
+        if (this.settings.apiKey) {
+            formData.append("api_key", this.settings.apiKey);
+        }
+        for (const f of files) {
+            formData.append("files", f);
+        }
+
+        try {
+            const resp = await fetch("/api/upload", {
+                method: "POST",
+                body: formData
+            });
+            const data = await resp.json();
+
+            if (!resp.ok || data.error) {
+                this.showToast(data.error || "Lỗi tải lên tài liệu.", "error");
+                return;
+            }
+
+            this.uploadedFiles = data.files || [];
+            this.renderUploadedFiles(this.uploadedFiles, true);
+            this.setScope("hybrid");
+            this.showToast(data.message || "Tải lên tài liệu thành công!", "success");
+        } catch (err) {
+            this.showToast("Không thể kết nối đến máy chủ khi tải tài liệu.", "error");
+        } finally {
+            if (this.uploadStatusIndicator) {
+                this.uploadStatusIndicator.style.display = "none";
+            }
+        }
+    }
+
+    async fetchSessionDocs(sessionId) {
+        if (!sessionId) return;
+        try {
+            const resp = await fetch(`/api/session-docs?session_id=${encodeURIComponent(sessionId)}`);
+            if (resp.ok) {
+                const data = await resp.json();
+                this.uploadedFiles = data.files || [];
+                this.renderUploadedFiles(this.uploadedFiles);
+                if (this.uploadedFiles.length > 0 && this.currentScope === "ptit_only") {
+                    this.setScope("hybrid");
+                }
+            }
+        } catch (e) {
+            console.error("Lỗi lấy danh sách tài liệu phiên:", e);
+        }
+    }
+
+    renderUploadedFiles(files, showBar = false) {
+        if (!this.uploadedFilesList || !this.uploadedFilesBar) return;
+        this.uploadedFilesList.innerHTML = "";
+
+        const count = files ? files.length : 0;
+        if (this.navDocsCountText) {
+            this.navDocsCountText.textContent = `Tài liệu (${count})`;
+        }
+
+        if (!files || files.length === 0) {
+            this.uploadedFilesBar.style.display = "none";
+            if (this.scopeDocsCountBadge) this.scopeDocsCountBadge.textContent = "0 file";
+            if (this.docsSidePanel && this.docsSidePanel.classList.contains("open")) {
+                this.renderSidePanelDocsList();
+            }
+            return;
+        }
+
+        if (showBar) {
+            this.uploadedFilesBar.style.display = "flex";
+        } else {
+            this.uploadedFilesBar.style.display = "none";
+        }
+        if (this.scopeDocsCountBadge) {
+            this.scopeDocsCountBadge.textContent = `${files.length} file`;
+        }
+        if (this.docsSidePanel && this.docsSidePanel.classList.contains("open")) {
+            this.renderSidePanelDocsList();
+        }
+
+        files.forEach(f => {
+            const badge = document.createElement("div");
+            badge.className = "file-badge";
+            const ext = f.filename.split(".").pop().toLowerCase();
+            let iconClass = "fa-file-lines";
+            if (ext === "pdf") iconClass = "fa-file-pdf";
+            else if (ext === "docx") iconClass = "fa-file-word";
+
+            badge.innerHTML = `
+                <i class="fa-solid ${iconClass} file-badge-icon"></i>
+                <span class="file-badge-name" title="${f.filename}">${f.filename}</span>
+                <span class="file-badge-meta">(${f.chunks_count || 1} chunks)</span>
+                <button type="button" class="file-badge-remove" title="Xóa tài liệu này"><i class="fa-solid fa-xmark"></i></button>
+            `;
+
+            const removeBtn = badge.querySelector(".file-badge-remove");
+            removeBtn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                await this.deleteSessionDoc(f.filename);
+            });
+
+            this.uploadedFilesList.appendChild(badge);
+        });
+    }
+
+    openSidePanel() {
+        if (!this.docsSidePanel) return;
+        this.renderSidePanelDocsList();
+        this.docsSidePanel.classList.add("open");
+        if (this.docsSidePanelBackdrop) this.docsSidePanelBackdrop.classList.add("active");
+    }
+
+    closeSidePanel() {
+        if (!this.docsSidePanel) return;
+        this.docsSidePanel.classList.remove("open");
+        if (this.docsSidePanelBackdrop) this.docsSidePanelBackdrop.classList.remove("active");
+    }
+
+    openUploadedDocsModal() {
+        this.openSidePanel();
+    }
+
+    closeUploadedDocsModal() {
+        this.closeSidePanel();
+    }
+
+    renderModalDocsList() {
+        this.renderSidePanelDocsList();
+    }
+
+    renderSidePanelDocsList() {
+        if (!this.sidePanelDocsList) return;
+        this.sidePanelDocsList.innerHTML = "";
+
+        const files = this.uploadedFiles || [];
+        if (this.sidePanelDocsCountBadge) {
+            this.sidePanelDocsCountBadge.textContent = `${files.length}/3 file`;
+        }
+
+        if (files.length === 0) {
+            this.sidePanelDocsList.innerHTML = `
+                <div class="side-panel-empty-docs">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <h4>Chưa có tài liệu nào</h4>
+                    <p>Hãy tải lên tài liệu môn học, đề cương (.pdf, .docx, .txt, .md) để hỏi đáp trực tiếp cùng AI.</p>
+                </div>
+            `;
+            return;
+        }
+
+        files.forEach(f => {
+            const item = document.createElement("div");
+            item.className = "side-panel-doc-item";
+
+            const ext = f.filename.split(".").pop().toLowerCase();
+            let iconClass = "fa-file-lines";
+            if (ext === "pdf") iconClass = "fa-file-pdf";
+            else if (ext === "docx") iconClass = "fa-file-word";
+
+            const dateStr = f.uploaded_at ? new Date(f.uploaded_at * 1000).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
+
+            item.innerHTML = `
+                <div class="side-panel-doc-left">
+                    <div class="side-panel-doc-icon"><i class="fa-solid ${iconClass}"></i></div>
+                    <div class="side-panel-doc-details">
+                        <span class="side-panel-doc-name" title="${this.escapeHtml(f.filename)}">${this.escapeHtml(f.filename)}</span>
+                        <div class="side-panel-doc-submeta">
+                            <span><i class="fa-solid fa-layer-group"></i> ${f.chunks_count || 1} chunks</span>
+                            ${dateStr ? `<span><i class="fa-regular fa-clock"></i> ${dateStr}</span>` : ""}
+                        </div>
+                    </div>
+                </div>
+                <div class="side-panel-doc-actions">
+                    <button type="button" class="icon-btn btn-delete-doc" title="Xóa tài liệu này">
+                        <i class="fa-regular fa-trash-can"></i>
+                    </button>
+                </div>
+            `;
+
+            const delBtn = item.querySelector(".btn-delete-doc");
+            delBtn.addEventListener("click", async () => {
+                await this.deleteSessionDoc(f.filename);
+                this.renderSidePanelDocsList();
+            });
+
+            this.sidePanelDocsList.appendChild(item);
+        });
+    }
+
+    async clearAllSessionDocs() {
+        if (!this.uploadedFiles || this.uploadedFiles.length === 0) {
+            this.showToast("Không có tài liệu nào để xóa.", "info");
+            return;
+        }
+        try {
+            const resp = await fetch("/api/session-docs", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: this.currentSessionId })
+            });
+            if (resp.ok) {
+                this.uploadedFiles = [];
+                this.renderUploadedFiles([], false);
+                this.renderSidePanelDocsList();
+                this.setScope("ptit_only");
+                this.showToast("Đã xóa tất cả tài liệu trong phiên.", "success");
+            }
+        } catch (e) {
+            this.showToast("Lỗi khi xóa tài liệu.", "error");
+        }
+    }
+
+    async deleteSessionDoc(filename) {
+        try {
+            const resp = await fetch("/api/session-docs", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    session_id: this.currentSessionId,
+                    filename: filename
+                })
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                this.uploadedFiles = data.files || [];
+                this.renderUploadedFiles(this.uploadedFiles, false);
+                this.renderSidePanelDocsList();
+                if (this.uploadedFiles.length === 0) {
+                    this.setScope("ptit_only");
+                }
+                this.showToast(`Đã xóa tài liệu '${filename}'.`, "info");
+            }
+        } catch (e) {
+            this.showToast("Lỗi khi xóa tài liệu.", "error");
+        }
     }
 }
 

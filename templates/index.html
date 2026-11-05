@@ -21,7 +21,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=5">
 </head>
 <body>
     <div class="app-layout">
@@ -112,6 +112,10 @@
                     </div>
                 </div>
                 <div class="navbar-right">
+                    <button class="nav-action-pill" id="openUploadedDocsModalBtn" title="Xem danh sách tài liệu đã tải lên trong phiên">
+                        <i class="fa-solid fa-folder-open"></i>
+                        <span id="navDocsCountText">Tài liệu (0)</span>
+                    </button>
                     <button class="icon-btn" id="exportChatBtn" title="Xuất nội dung trò chuyện (Markdown)">
                         <i class="fa-solid fa-arrow-up-from-bracket"></i>
                     </button>
@@ -184,6 +188,18 @@
                         </div>
                     </div>
 
+                    <!-- UPLOADED FILES BAR (Trạng thái tài liệu tải lên) -->
+                    <div class="uploaded-files-bar" id="uploadedFilesBar" style="display: none;">
+                        <div class="uploaded-files-list" id="uploadedFilesList"></div>
+                        <div class="upload-status-indicator" id="uploadStatusIndicator" style="display: none;">
+                            <span class="spinner-sm"></span>
+                            <span id="uploadStatusText">Đang xử lý tài liệu...</span>
+                        </div>
+                        <button type="button" class="bar-manage-btn" id="openDocsModalFromBarBtn" title="Xem chi tiết tài liệu đã tải lên">
+                            <i class="fa-solid fa-up-right-from-square"></i> Chi tiết
+                        </button>
+                    </div>
+
                     <!-- Input form -->
                     <form class="input-form" id="chatForm">
                         <textarea 
@@ -197,6 +213,47 @@
                         <div class="input-controls">
                             <!-- Vạch ngăn cách (Divider - desktop) -->
                             <div class="input-divider"></div>
+
+                            <!-- BỘ CHỌN PHẠM VI (SCOPE SWITCHER) -->
+                            <div class="scope-selector-wrapper" id="scopeSelectorWrapper">
+                                <button type="button" class="scope-selector-btn" id="scopeSelectorBtn" title="Chọn phạm vi tra cứu (Scope Switcher)" aria-haspopup="true" aria-expanded="false">
+                                    <i class="fa-solid fa-layer-group scope-icon-indicator"></i>
+                                    <span class="scope-btn-label" id="scopeBtnLabel">Chỉ PTIT</span>
+                                    <i class="fa-solid fa-chevron-down scope-btn-arrow"></i>
+                                </button>
+
+                                <div class="scope-popup-card" id="scopePopupCard" role="menu">
+                                    <div class="scope-popup-header">
+                                        <span class="scope-popup-header-title">
+                                            <i class="fa-solid fa-sliders"></i> Phạm Vi Tra Cứu
+                                        </span>
+                                        <span class="scope-popup-header-badge" id="scopeDocsCountBadge">0 file</span>
+                                    </div>
+                                    <div class="scope-popup-list">
+                                        <div class="scope-popup-item" data-scope="hybrid" role="menuitem">
+                                            <div class="scope-popup-item-info">
+                                                <span class="scope-popup-item-name"><i class="fa-solid fa-arrows-split-up-and-left"></i> Kết hợp (Hybrid)</span>
+                                                <span class="scope-badge-tag badge-recommended">Khuyên dùng • Đối chiếu tài liệu &amp; PTIT</span>
+                                            </div>
+                                            <i class="fa-solid fa-check scope-popup-item-check"></i>
+                                        </div>
+                                        <div class="scope-popup-item" data-scope="user_only" role="menuitem">
+                                            <div class="scope-popup-item-info">
+                                                <span class="scope-popup-item-name"><i class="fa-solid fa-file-lines"></i> Chỉ tài liệu tải lên</span>
+                                                <span class="scope-badge-tag badge-fast">Chỉ tìm trong các file bạn đã tải lên</span>
+                                            </div>
+                                            <i class="fa-solid fa-check scope-popup-item-check"></i>
+                                        </div>
+                                        <div class="scope-popup-item selected" data-scope="ptit_only" role="menuitem">
+                                            <div class="scope-popup-item-info">
+                                                <span class="scope-popup-item-name"><i class="fa-solid fa-building-columns"></i> Chỉ Cơ sở tri thức PTIT</span>
+                                                <span class="scope-badge-tag badge-balanced">Học phí, quy chế, CTĐT Học viện</span>
+                                            </div>
+                                            <i class="fa-solid fa-check scope-popup-item-check"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
                             <!-- THANH CHỌN MÔ HÌNH THU GỌN -->
                             <div class="model-selector-wrapper" id="modelSelectorWrapper">
@@ -279,6 +336,10 @@
                             </div>
 
                             <div class="input-actions-group">
+                                <input type="file" id="fileUploadInput" multiple accept=".pdf,.docx,.txt,.md" style="display: none;">
+                                <button type="button" class="tool-btn" id="uploadFileBtn" title="Tải tài liệu lên (.pdf, .docx, .txt, .md - Tối đa 3 file, 5MB/file)">
+                                    <i class="fa-solid fa-paperclip"></i>
+                                </button>
                                 <button type="button" class="tool-btn" id="voiceInputBtn" title="Nhập câu hỏi bằng giọng nói (Speech-to-Text)">
                                     <i class="fa-solid fa-microphone"></i>
                                 </button>
@@ -346,6 +407,25 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="voiceSelect">Giọng đọc Trợ lý (Neural Voice tiếng Việt)</label>
+                    <select id="voiceSelect" class="form-select">
+                        <option value="vi-VN-HoaiMyNeural" selected>Giọng Nữ Bắc Bộ (Hoài My - Tự nhiên, chuẩn truyền thanh)</option>
+                        <option value="vi-VN-NamMinhNeural">Giọng Nam Bắc Bộ (Nam Minh - Trầm ấm, truyền cảm)</option>
+                    </select>
+                    <small class="form-help">Công nghệ Edge-TTS + gTTS: Phát âm thanh đồng nhất 100% trên Chrome, Edge, Cốc Cốc.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="voiceSpeedSelect">Tốc độ đọc giọng nói</label>
+                    <select id="voiceSpeedSelect" class="form-select">
+                        <option value="0.8">0.8x (Chậm rãi)</option>
+                        <option value="1.0" selected>1.0x (Tiêu chuẩn)</option>
+                        <option value="1.2">1.2x (Hơi nhanh)</option>
+                        <option value="1.5">1.5x (Nhanh)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="autoVoiceToggle">
                         <span>Tự động đọc to câu trả lời của trợ lý bằng giọng nói</span>
@@ -384,10 +464,46 @@
         </div>
     </div>
 
+    <!-- SIDE PANEL: UPLOADED DOCUMENTS DRAWER -->
+    <div class="docs-side-panel-backdrop" id="docsSidePanelBackdrop"></div>
+    <aside class="docs-side-panel" id="docsSidePanel" aria-label="Quản lý tài liệu đã tải lên">
+        <div class="docs-side-panel-header">
+            <div class="docs-side-panel-title-group">
+                <div class="docs-side-panel-icon"><i class="fa-solid fa-folder-open"></i></div>
+                <div>
+                    <h3 class="docs-side-panel-title">Tài Liệu Đã Nạp</h3>
+                    <span class="docs-side-panel-badge" id="sidePanelDocsCountBadge">0/3 file</span>
+                </div>
+            </div>
+            <button class="icon-btn" id="closeDocsSidePanelBtn" title="Đóng bảng tài liệu">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="docs-side-panel-body">
+            <div class="docs-side-panel-upload-box">
+                <button type="button" class="btn btn-primary btn-sm side-panel-upload-btn" id="sidePanelUploadBtn">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Tải thêm tài liệu
+                </button>
+                <p class="docs-side-panel-hint">
+                    Hỗ trợ: <strong>.pdf, .docx, .txt, .md</strong> (Tối đa 3 file, 5MB, 25 trang/file).
+                </p>
+            </div>
+            <div class="docs-side-panel-list" id="sidePanelDocsList">
+                <!-- Populated dynamically by JS -->
+            </div>
+        </div>
+        <div class="docs-side-panel-footer">
+            <button class="btn btn-danger-subtle btn-sm" id="sidePanelClearAllBtn">
+                <i class="fa-regular fa-trash-can"></i> Xóa tất cả
+            </button>
+            <button class="btn btn-secondary btn-sm" id="closeDocsSidePanelFooterBtn">Đóng</button>
+        </div>
+    </aside>
+
     <!-- TOAST NOTIFICATION CONTAINER -->
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- APP JAVASCRIPT -->
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/app.js?v=5"></script>
 </body>
 </html>
