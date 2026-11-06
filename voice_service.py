@@ -5,6 +5,7 @@ dự phòng gTTS (Google Translate TTS) và Speech-to-Text (STT) Fallback với 
 
 import os
 import re
+import time
 import hashlib
 import asyncio
 import edge_tts
@@ -16,6 +17,11 @@ load_dotenv()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 AUDIO_CACHE_DIR = os.path.join(BASE_DIR, "static", "audio_cache")
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
+
+# Circuit Breaker cho Edge-TTS (Tránh bị treo chờ 15s-20s nếu Microsoft Bing ngắt kết nối)
+EDGE_TTS_TIMEOUT = 2.0  # Giới hạn tối đa 2 giây cho Edge-TTS
+EDGE_TTS_COOLDOWN = 180  # Nếu lỗi, tạm ngừng thử Edge-TTS trong 3 phút, chuyển thẳng gTTS siêu tốc
+_edge_tts_disabled_until = 0.0
 
 # Bảng tra từ viết tắt và thuật ngữ chuyên ngành PTIT sang văn bản phát âm tự nhiên
 PTIT_ABBREVIATIONS = [
@@ -129,18 +135,21 @@ def clean_and_normalize_text(text: str) -> str:
 
 
 async def _synthesize_edge_tts(text: str, voice: str, output_path: str):
-    """Thực thi gọi Edge-TTS bất đồng bộ không rate để đảm bảo 100% tương thích."""
+    """Thực thi gọi Edge-TTS bất đồng bộ với giới hạn timeout ngắn để không làm treo hệ thống."""
     communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(output_path)
+    # Giới hạn timeout 2.0s: nếu Bing không phản hồi lập tức thì hủy để chuyển gTTS
+    await asyncio.wait_for(communicate.save(output_path), timeout=EDGE_TTS_TIMEOUT)
 
 
 def generate_speech(text: str, voice: str = "vi-VN-HoaiMyNeural") -> dict:
     """
     Tạo file giọng nói MP3:
     1. Ưu tiên: Microsoft Edge-TTS (Neural Voice tiếng Việt Bắc Bộ - Hoài My / Nam Minh).
-    2. Dự phòng: Google Translate TTS (gTTS tiếng Việt).
+    2. Dự phòng tức thì: Google Translate TTS (gTTS tiếng Việt) kèm Circuit Breaker.
     3. Bộ nhớ đệm (Cache MD5) để tái sử dụng ngay lập tức mà không gọi lại API.
     """
+    global _edge_tts_disabled_until
+
     clean_text = clean_and_normalize_text(text)
     if not clean_text:
         return {"error": "Văn bản rỗng sau khi chuẩn hóa."}
@@ -150,7 +159,9 @@ def generate_speech(text: str, voice: str = "vi-VN-HoaiMyNeural") -> dict:
         "vi-VN-HoaiMyNeural": "Giọng Nữ (Hoài My - Bắc Bộ)",
         "vi-VN-NamMinhNeural": "Giọng Nam (Nam Minh - Bắc Bộ)"
     }
-    if voice not in valid_voices:
+    # "google-vi": ép dùng giọng Google Tiếng Việt (gTTS) cho lựa chọn giọng Nữ trên Chrome
+    force_gtts = (voice == "google-vi")
+    if voice not in valid_voices and not force_gtts:
         voice = "vi-VN-HoaiMyNeural"
 
     # Tạo mã băm MD5 duy nhất cho nội dung và giọng đọc
@@ -160,7 +171,7 @@ def generate_speech(text: str, voice: str = "vi-VN-HoaiMyNeural") -> dict:
     filepath = os.path.join(AUDIO_CACHE_DIR, filename)
     audio_url = f"/static/audio_cache/{filename}"
 
-    # Kiểm tra xem file MP3 đã có trong Cache chưa
+    # Kiểm tra xem file MP3 đã có trong Cache chưa -> trả về ngay < 5ms
     if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
         return {
             "status": "success",
@@ -170,21 +181,25 @@ def generate_speech(text: str, voice: str = "vi-VN-HoaiMyNeural") -> dict:
             "normalized_text": clean_text
         }
 
-    # 1. Thử nghiệm Edge-TTS trước (Chất lượng cao nhất)
-    try:
-        asyncio.run(_synthesize_edge_tts(clean_text, voice, filepath))
-        if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-            return {
-                "status": "success",
-                "audio_url": audio_url,
-                "cached": False,
-                "provider": "edge-tts",
-                "normalized_text": clean_text
-            }
-    except Exception as edge_err:
-        print(f"[!] Edge-TTS Error, switching to gTTS fallback: {edge_err}")
+    now = time.time()
+    # 1. Thử nghiệm Edge-TTS nếu Circuit Breaker không bị ngắt
+    if not force_gtts and now > _edge_tts_disabled_until:
+        try:
+            asyncio.run(_synthesize_edge_tts(clean_text, voice, filepath))
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                return {
+                    "status": "success",
+                    "audio_url": audio_url,
+                    "cached": False,
+                    "provider": "edge-tts",
+                    "normalized_text": clean_text
+                }
+        except Exception as edge_err:
+            # Ngắt Circuit Breaker trong 3 phút để các câu sau đi thẳng vào gTTS siêu tốc mà không bị delay
+            _edge_tts_disabled_until = now + EDGE_TTS_COOLDOWN
+            print(f"[!] Edge-TTS Error / Timeout ({edge_err}). Circuit breaker active for 180s -> Chuyển thẳng gTTS siêu tốc.")
 
-    # 2. Dự phòng: Dùng gTTS (Google Translate TTS) nếu Edge-TTS gặp lỗi mạng
+    # 2. Dự phòng: Dùng gTTS (Google Translate TTS) - cực nhanh cho câu ngắn (~0.4s - 0.6s)
     try:
         tts = gTTS(text=clean_text, lang="vi", slow=False)
         tts.save(filepath)

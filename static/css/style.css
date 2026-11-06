@@ -2916,3 +2916,70 @@ select option:hover,
     50% { transform: scale(1.18); }
     100% { transform: scale(1); }
 }
+
+/* Active Voice Status Line / Badge on Bot Message & Settings Modal */
+.msg-actions {
+    flex-wrap: wrap;
+}
+
+.msg-voice-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-left: 4px;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.msg-voice-badge i {
+    font-size: 0.75rem;
+    color: var(--primary);
+    opacity: 0.85;
+}
+
+.msg-voice-badge.speaking {
+    color: var(--primary);
+    background: rgba(211, 0, 0, 0.08);
+    border-color: rgba(211, 0, 0, 0.35);
+    font-weight: 600;
+    box-shadow: 0 0 10px rgba(211, 0, 0, 0.12);
+}
+
+.msg-voice-badge.speaking i {
+    animation: speakingVoiceWave 1s ease-in-out infinite;
+    opacity: 1;
+}
+
+@keyframes speakingVoiceWave {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.22); }
+}
+
+.voice-current-status {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(211, 0, 0, 0.06);
+    border: 1px dashed rgba(211, 0, 0, 0.3);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.voice-current-status i {
+    color: var(--primary);
+    font-size: 0.9rem;
+}
+
+.voice-current-status strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}

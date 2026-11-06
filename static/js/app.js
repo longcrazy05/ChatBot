@@ -59,7 +59,7 @@ class PTITChatApp {
             model: "gemini-3.1-flash-lite",
             topK: 4,
             autoVoice: false,
-            voice: "vi-VN-HoaiMyNeural",
+            voice: "female",
             voiceSpeed: 1.0
         };
         this.currentBotAudio = null;
@@ -81,6 +81,7 @@ class PTITChatApp {
         this.loadSessions();
         this.bindEvents();
         this.autoGrowTextarea();
+        this.initSpeechSynthesisVoices();
         this.initSpeechRecognition();
         this.fetchKBStatus();
         this.renderCategorySuggestions();
@@ -188,6 +189,7 @@ class PTITChatApp {
         this.autoVoiceToggle = document.getElementById("autoVoiceToggle");
         this.voiceSelect = document.getElementById("voiceSelect");
         this.voiceSpeedSelect = document.getElementById("voiceSpeedSelect");
+        this.currentVoiceNameDisplay = document.getElementById("currentVoiceNameDisplay");
 
         this.sourceModal = document.getElementById("sourceModal");
         this.sourceModalTitle = document.getElementById("sourceModalTitle");
@@ -263,6 +265,11 @@ class PTITChatApp {
         if (this.topKInput) {
             this.topKInput.addEventListener("input", () => {
                 if (this.topKValue) this.topKValue.textContent = this.topKInput.value;
+            });
+        }
+        if (this.voiceSelect) {
+            this.voiceSelect.addEventListener("change", () => {
+                this.updateVoiceStatusUI(this.voiceSelect.value);
             });
         }
 
@@ -472,8 +479,9 @@ class PTITChatApp {
         this.topKInput.value = this.settings.topK || 4;
         this.topKValue.textContent = this.topKInput.value;
         this.autoVoiceToggle.checked = !!this.settings.autoVoice;
-        if (this.voiceSelect) this.voiceSelect.value = this.settings.voice || "vi-VN-HoaiMyNeural";
+        if (this.voiceSelect) this.voiceSelect.value = /namminh|male/i.test(this.settings.voice || "") && !/^female$/i.test(this.settings.voice) ? "male" : "female";
         if (this.voiceSpeedSelect) this.voiceSpeedSelect.value = String(this.settings.voiceSpeed || 1.0);
+        this.updateVoiceStatusUI(this.voiceSelect ? this.voiceSelect.value : this.settings.voice);
         this.settingsModal.classList.add("active");
     }
 
@@ -492,6 +500,7 @@ class PTITChatApp {
         if (this.updateQuickModelUI) {
             this.updateQuickModelUI(this.settings.model);
         }
+        this.updateVoiceStatusUI(this.settings.voice);
         this.settingsModal.classList.remove("active");
         this.showToast("Đã lưu cấu hình RAG thành công!", "success");
     }
@@ -501,20 +510,23 @@ class PTITChatApp {
             apiKey: "",
             model: "gemini-3.1-flash-lite",
             topK: 4,
-            autoVoice: false
+            autoVoice: false,
+            voice: "female",
+            voiceSpeed: 1.0
         };
         this.customApiKeyInput.value = "";
         this.modelSelect.value = "gemini-3.1-flash-lite";
         this.topKInput.value = 4;
         this.topKValue.textContent = "4";
         this.autoVoiceToggle.checked = false;
-        if (this.voiceSelect) this.voiceSelect.value = "vi-VN-HoaiMyNeural";
+        if (this.voiceSelect) this.voiceSelect.value = "female";
         if (this.voiceSpeedSelect) this.voiceSpeedSelect.value = "1.0";
         localStorage.removeItem("ptit_chat_settings");
         this.modelBadgeDisplay.textContent = "gemini-3.1-flash-lite";
         if (this.updateQuickModelUI) {
             this.updateQuickModelUI("gemini-3.1-flash-lite");
         }
+        this.updateVoiceStatusUI("female");
         this.showToast("Đã khôi phục cài đặt mặc định.", "info");
     }
 
@@ -581,11 +593,7 @@ class PTITChatApp {
     }
 
     switchSession(sessionId) {
-        if (this.currentBotAudio) {
-            this.currentBotAudio.pause();
-            this.currentBotAudio = null;
-        }
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        this.stopCurrentSpeech();
 
         this.currentSessionId = sessionId;
         const session = this.sessions.find(s => s.id === sessionId);
@@ -831,12 +839,21 @@ class PTITChatApp {
             });
 
             const speakBtn = document.createElement("button");
-            speakBtn.className = "msg-action-btn";
+            speakBtn.className = "msg-action-btn msg-speak-btn";
             speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i> <span>Đọc</span>';
+
+            const voiceInfo = this.getActiveVoiceInfo();
+            const voiceBadge = document.createElement("span");
+            voiceBadge.className = "msg-voice-badge";
+            voiceBadge.title = voiceInfo.detailName;
+            voiceBadge.innerHTML = `<i class="fa-solid fa-microphone-lines"></i> <span class="voice-badge-text">Đang dùng: ${this.escapeHtml(voiceInfo.shortName)}</span>`;
+            speakBtn._voiceBadge = voiceBadge;
+
             speakBtn.addEventListener("click", () => this.toggleSpeech(msg.content, speakBtn));
 
             actionsDiv.appendChild(copyBtn);
             actionsDiv.appendChild(speakBtn);
+            actionsDiv.appendChild(voiceBadge);
             wrapperDiv.appendChild(actionsDiv);
         }
 
@@ -859,11 +876,7 @@ class PTITChatApp {
         if (!text || this.isProcessing) return;
 
         // Dừng giọng nói bot đang đọc nếu có
-        if (this.currentBotAudio) {
-            this.currentBotAudio.pause();
-            this.currentBotAudio = null;
-        }
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        this.stopCurrentSpeech();
 
         // Reset Textarea
         this.userInput.value = "";
@@ -967,7 +980,9 @@ class PTITChatApp {
 
             // Auto-voice if enabled
             if (this.settings.autoVoice) {
-                this.speakText(botMsg.content);
+                const allSpeakBtns = this.messageThread.querySelectorAll(".msg-speak-btn");
+                const lastSpeakBtn = allSpeakBtns.length > 0 ? allSpeakBtns[allSpeakBtns.length - 1] : null;
+                this.speakText(botMsg.content, lastSpeakBtn);
             }
 
         } catch (err) {
@@ -1045,189 +1060,581 @@ class PTITChatApp {
         }
     }
 
-    // SPEECH SYNTHESIS (TTS) - ĐỒNG NHẤT 100% CÁC TRÌNH DUYỆT (EDGE-TTS + gTTS + CACHE)
-    async toggleSpeech(text, btnElement) {
-        // Dừng âm thanh đang phát nếu người dùng bấm lại nút
-        if (this.currentBotAudio) {
-            this.currentBotAudio.pause();
-            this.currentBotAudio = null;
-            document.querySelectorAll(".msg-action-btn.active").forEach(b => {
-                b.classList.remove("active");
-                const span = b.querySelector("span");
-                if (span) span.textContent = "Đọc";
-                const icon = b.querySelector("i");
-                if (icon) icon.className = "fa-solid fa-volume-high";
-            });
-            if (this.currentUtteranceText === text) {
-                this.currentUtteranceText = null;
-                return;
+    // =========================================================================
+    // SPEECH SYNTHESIS (TTS) - GIỌNG BẢN ĐỊA TRÌNH DUYỆT, DỰ PHÒNG QUA BACKEND
+    // =========================================================================
+    initSpeechSynthesisVoices() {
+        if ("speechSynthesis" in window) {
+            try {
+                window.speechSynthesis.getVoices();
+                window.speechSynthesis.onvoiceschanged = () => {
+                    this.updateVoiceStatusUI();
+                };
+            } catch (e) {
+                console.warn("SpeechSynthesis init warning:", e);
             }
+        }
+        setTimeout(() => this.updateVoiceStatusUI(), 350);
+    }
+
+    getActiveVoiceInfo(preferredVoiceSetting = null) {
+        const raw = preferredVoiceSetting || (this.settings && this.settings.voice) || "female";
+        // Tương thích giá trị cũ (vi-VN-NamMinhNeural -> male, còn lại -> female)
+        const wantMale = raw === "male" || /namminh/i.test(raw);
+
+        const voices = ("speechSynthesis" in window && typeof window.speechSynthesis.getVoices === "function")
+            ? window.speechSynthesis.getVoices()
+            : [];
+        const viVoices = voices.filter(v => {
+            const lang = (v.lang || "").toLowerCase().replace("_", "-");
+            const name = (v.name || "").toLowerCase();
+            return lang.startsWith("vi") || name.includes("vietnamese") || name.includes("tiếng việt");
+        });
+        const isMaleName = (n) => /namminh|nam minh|\ban\b/i.test(n);
+
+        let chosen = null;
+        if (wantMale) {
+            chosen = viVoices.find(v => /namminh|nam minh/i.test(v.name))
+                  || viVoices.find(v => /\ban\b/i.test(v.name));
+        } else {
+            chosen = viVoices.find(v => /hoaimy|hoài my/i.test(v.name))
+                  || viVoices.find(v => /google/i.test(v.name))
+                  || viVoices.find(v => !isMaleName(v.name));
         }
 
-        if (window.speechSynthesis && window.speechSynthesis.speaking) {
-            window.speechSynthesis.cancel();
-            document.querySelectorAll(".msg-action-btn.active").forEach(b => {
-                b.classList.remove("active");
-                const span = b.querySelector("span");
-                if (span) span.textContent = "Đọc";
-                const icon = b.querySelector("i");
-                if (icon) icon.className = "fa-solid fa-volume-high";
+        if (chosen) {
+            const rawName = chosen.name || "Tiếng Việt";
+            let friendly;
+            if (/hoaimy/i.test(rawName)) friendly = "Microsoft Hoài My (giọng nữ)";
+            else if (/namminh/i.test(rawName)) friendly = "Microsoft Nam Minh (giọng nam)";
+            else if (/\ban\b/i.test(rawName)) friendly = "Microsoft An (giọng nam)";
+            else if (/google/i.test(rawName)) friendly = "Google Tiếng Việt (giọng nữ)";
+            else friendly = rawName.replace(/\s*-\s*Vietnamese.*$/i, "");
+            return {
+                mode: "native",
+                voiceObj: chosen,
+                backendVoice: null,
+                shortName: friendly,
+                detailName: friendly + " — đọc trực tiếp trên trình duyệt (không qua Backend)"
+            };
+        }
+
+        // Trình duyệt không có giọng phù hợp -> dùng Backend
+        if (wantMale) {
+            return {
+                mode: "stream", voiceObj: null, backendVoice: "vi-VN-NamMinhNeural",
+                shortName: "Nam Minh (giọng nam - qua Backend)",
+                detailName: "Trình duyệt chưa có giọng nam tiếng Việt — dùng Nam Minh qua Backend"
+            };
+        }
+        return {
+            mode: "stream", voiceObj: null, backendVoice: "google-vi",
+            shortName: "Google Tiếng Việt (giọng nữ - qua Backend)",
+            detailName: "Trình duyệt chưa có giọng nữ tiếng Việt — dùng Google Tiếng Việt qua Backend"
+        };
+    }
+
+    updateVoiceStatusUI(preferredVoiceSetting = null) {
+        const info = this.getActiveVoiceInfo(preferredVoiceSetting);
+        if (this.currentVoiceNameDisplay) {
+            this.currentVoiceNameDisplay.textContent = info.detailName;
+        }
+        // Cập nhật dòng hiển thị giọng nói trên các tin nhắn đang ở trạng thái chờ
+        document.querySelectorAll(".msg-voice-badge:not(.speaking)").forEach(badge => {
+            badge.title = info.detailName;
+            const txtSpan = badge.querySelector(".voice-badge-text");
+            if (txtSpan) {
+                txtSpan.textContent = `Đang dùng: ${info.shortName}`;
+            }
+        });
+    }
+
+    setVoiceBadgeSpeakingState(btnElement, isSpeaking, voiceShortName = null) {
+        const info = this.getActiveVoiceInfo();
+        const activeName = voiceShortName || info.shortName;
+
+        // Reset tất cả badge về trạng thái bình thường trước
+        if (!isSpeaking) {
+            document.querySelectorAll(".msg-voice-badge").forEach(badge => {
+                badge.classList.remove("speaking");
+                const txt = badge.querySelector(".voice-badge-text");
+                if (txt) txt.textContent = `Đang dùng: ${info.shortName}`;
             });
-            if (this.currentUtteranceText === text) {
-                this.currentUtteranceText = null;
-                return;
+            return;
+        }
+
+        if (btnElement && btnElement._voiceBadge) {
+            const badge = btnElement._voiceBadge;
+            badge.classList.add("speaking");
+            const txt = badge.querySelector(".voice-badge-text");
+            if (txt) {
+                txt.textContent = `🔊 Đang đọc bằng: ${activeName}`;
             }
         }
+    }
+
+    stopCurrentSpeech() {
+        // Tăng token phiên đọc để vô hiệu hóa tức thì mọi hàm async/promise đang chạy dở
+        this.speechSessionToken = (this.speechSessionToken || 0) + 1;
+        this.isPlayingSentenceQueue = false;
+        this.sentenceQueue = [];
+        this.sentenceIndex = 0;
+        this.currentUtteranceText = null;
+
+        // Hủy ngay lập tức mọi request fetch(/api/tts) đang chờ phản hồi
+        if (this.ttsAbortController) {
+            try {
+                this.ttsAbortController.abort();
+            } catch (e) {}
+            this.ttsAbortController = null;
+        }
+
+        // TẮT SẠCH TẤT CẢ các Audio element đã từng được tạo để không bao giờ bị phát đè
+        if (this.activeAudioElements && this.activeAudioElements.size > 0) {
+            this.activeAudioElements.forEach(audioEl => {
+                if (audioEl) {
+                    try {
+                        audioEl.onended = null;
+                        audioEl.onerror = null;
+                        audioEl.oncanplay = null;
+                        audioEl.muted = true;
+                        audioEl.volume = 0;
+                        audioEl.pause();
+                        audioEl.removeAttribute("src");
+                        audioEl.load();
+                    } catch (e) {}
+                }
+            });
+            this.activeAudioElements.clear();
+        }
+
+        if (this.currentBotAudio) {
+            try {
+                this.currentBotAudio.onended = null;
+                this.currentBotAudio.onerror = null;
+                this.currentBotAudio.muted = true;
+                this.currentBotAudio.pause();
+                this.currentBotAudio.removeAttribute("src");
+            } catch (e) {}
+            this.currentBotAudio = null;
+        }
+
+        if (this.prefetchAudios) {
+            this.prefetchAudios.clear();
+        }
+
+        // Hủy dứt khoát Web Speech API (Lưu ý: KHÔNG gọi pause() để tránh Chromium bị kẹt trạng thái paused)
+        if (this.currentUtterance) {
+            this.currentUtterance.onend = null;
+            this.currentUtterance.onerror = null;
+            this.currentUtterance = null;
+        }
+
+        if (window.speechSynthesis) {
+            try {
+                window.speechSynthesis.cancel();
+            } catch (e) {}
+        }
+
+        document.querySelectorAll(".msg-action-btn.active").forEach(b => {
+            b.classList.remove("active");
+            const span = b.querySelector("span");
+            if (span) span.textContent = "Đọc";
+            const icon = b.querySelector("i");
+            if (icon) icon.className = "fa-solid fa-volume-high";
+        });
+        this.setVoiceBadgeSpeakingState(null, false);
+        this.currentBotSpeakBtn = null;
+    }
+
+    async toggleSpeech(text, btnElement) {
+        // Nếu nút đang ở trạng thái "Dừng" (.active) hoặc đang đọc chính câu này -> Dừng ngay lập tức!
+        if ((btnElement && btnElement.classList.contains("active")) || this.currentUtteranceText === text) {
+            this.stopCurrentSpeech();
+            return;
+        }
+
+        // Dừng câu khác đang đọc nếu có
+        this.stopCurrentSpeech();
 
         await this.speakText(text, btnElement);
+    }
+
+    normalizeTextForSpeech(text) {
+        if (!text) return "";
+
+        let s = text;
+
+        // 1. Loại bỏ các khối code, markdown, link, ký tự đặc biệt
+        s = s.replace(/```[\s\S]*?```/g, " ")
+             .replace(/`[^`]*`/g, " ")
+             .replace(/\|[^\n]+\|/g, " ")
+             .replace(/[-:]{2,}\s*\|\s*[-:]{2,}/g, " ")
+             .replace(/!\[.*?\]\(.*?\)/g, " ")
+             .replace(/\[(.*?)\]\(.*?\)/g, "$1")
+             .replace(/https?:\/\/\S+/g, " ")
+             .replace(/[*_~#><]/g, " ")
+             .replace(/\$\s*\\ge(q)?\s*([^$]+)\$/g, "từ $2 trở lên")
+             .replace(/\$\s*\\le(q)?\s*([^$]+)\$/g, "dưới hoặc bằng $2")
+             .replace(/\$([^$]+)\$/g, "$1")
+             .replace(/\$/g, " ");
+
+        // 2. Chuẩn hóa số tiền và các số hàng triệu/nghìn có dấu chấm (VD: 1.410.000, 1.410.000 VNĐ, 550.000đ/tín chỉ)
+        // Tránh lỗi Windows/Edge đọc "1.410.000" thành "một nghìn 4 trăm 10 không không không đồng"
+        const currencyRegex = /\b(\d{1,3}(?:\.\d{3})+)\s*(\/(?:tháng|năm|kỳ|học kỳ|tín chỉ|[^\s,.?!]+(?:\s+[^\s,.?!]+)?)|\s*(?:VNĐ|VND|đồng|đ(?=[\s\/]|$))(?:\/(?:tháng|năm|kỳ|học kỳ|tín chỉ|[^\s,.?!]+(?:\s+[^\s,.?!]+)?))?)?/gi;
+        s = s.replace(currencyRegex, (match, numStr, suffix) => {
+            const rawDigits = numStr.replace(/\./g, "");
+            const val = parseInt(rawDigits, 10);
+            if (isNaN(val)) return match;
+
+            let textNum = "";
+            if (val >= 1000000000) {
+                const ty = Math.floor(val / 1000000000);
+                const trieu = Math.floor((val % 1000000000) / 1000000);
+                textNum = ty + " tỷ";
+                if (trieu > 0) textNum += " " + trieu + " triệu";
+            } else if (val >= 1000000) {
+                const trieu = Math.floor(val / 1000000);
+                const nghin = Math.floor((val % 1000000) / 1000);
+                textNum = trieu + " triệu";
+                if (nghin > 0) textNum += " " + nghin + " nghìn";
+            } else if (val >= 1000) {
+                const nghin = Math.floor(val / 1000);
+                const tram = val % 1000;
+                textNum = nghin + " nghìn";
+                if (tram > 0) textNum += " " + tram;
+            } else {
+                textNum = String(val);
+            }
+
+            const suf = (suffix || "").trim();
+            const hasCurrency = /\b(?:vnđ|vnd|đồng)\b|đ(?:\b|\/)/i.test(suf) || val >= 100000;
+            let cleanSuf = suf.replace(/^(?:vnđ|vnd|đồng|đ)\s*/i, "").trim();
+            if (cleanSuf.startsWith("/")) {
+                cleanSuf = " một " + cleanSuf.substring(1).trim();
+            }
+
+            if (hasCurrency) {
+                return cleanSuf ? textNum + " đồng trên" + cleanSuf : textNum + " đồng";
+            }
+            return cleanSuf ? textNum + " trên" + cleanSuf : textNum;
+        });
+
+        // 3. Mở rộng từ viết tắt chuyên ngành PTIT
+        const abbrevs = [
+            [/\bPTIT\b/g, "Học viện Bưu chính Viễn thông"],
+            [/\bCNTT\b/g, "Công nghệ thông tin"],
+            [/\bATTT\b/g, "An toàn thông tin"],
+            [/\b(DTVT|ĐTVT)\b/g, "Điện tử viễn thông"],
+            [/\bKTPM\b/g, "Kỹ thuật phần mềm"],
+            [/\bKHMT\b/g, "Khoa học máy tính"],
+            [/\bTMĐT\b/g, "Thương mại điện tử"],
+            [/\b(TKĐPT|ĐPT)\b/g, "Đa phương tiện"],
+            [/\bCLC\b/g, "Chất lượng cao"],
+            [/(\d+)\s*(TC|tc|tín chỉ)\b/g, "$1 tín chỉ"],
+            [/\bTC\b/g, "tín chỉ"],
+            [/\b(HK1|HK\s*1|HKI)\b/g, "Học kỳ một"],
+            [/\b(HK2|HK\s*2|HKII)\b/g, "Học kỳ hai"],
+            [/\b(HK3|HK\s*3|HKIII)\b/g, "Học kỳ ba"],
+            [/\b(ĐTB|GPA)\b/g, "Điểm trung bình"],
+            [/\bSV\b/g, "sinh viên"],
+            [/\bGV\b/g, "giảng viên"],
+            [/\bKHTN\b/g, "Khoa học tự nhiên"],
+            [/\bGDTC\b/g, "Giáo dục thể chất"],
+            [/\bGDQP\b|\bGDQP-AN\b/g, "Giáo dục quốc phòng an ninh"]
+        ];
+
+        for (const [rgx, rep] of abbrevs) {
+            s = s.replace(rgx, rep);
+        }
+
+        s = s.replace(/\//g, " trên ");
+        s = s.replace(/%/g, " phần trăm ");
+        s = s.replace(/&/g, " và ");
+        s = s.replace(/\s+/g, " ").trim();
+
+        return s;
+    }
+
+    splitIntoSentences(text, maxChunkLen = 170) {
+        if (!text) return [];
+
+        // Tiền xử lý chuẩn hóa toàn bộ văn bản (từ viết tắt, số tiền)
+        const clean = this.normalizeTextForSpeech(text);
+
+        // Chia theo dòng và dấu câu (. ! ? ;)
+        const rawParts = clean.split(/[.!?;\n]+/);
+        const subChunks = [];
+
+        for (let part of rawParts) {
+            part = part.trim();
+            if (!part) continue;
+
+            if (part.length <= maxChunkLen) {
+                subChunks.push(part);
+            } else {
+                // Nếu câu dài quá 170 ký tự -> tách tiếp theo dấu phẩy, hai chấm hoặc khoảng trắng để stream trực tiếp không bị cắt
+                const clauses = part.split(/[,:–—]+/);
+                let temp = "";
+                for (let cl of clauses) {
+                    cl = cl.trim();
+                    if (!cl) continue;
+                    if (!temp) {
+                        temp = cl;
+                    } else if ((temp.length + 2 + cl.length) <= maxChunkLen) {
+                        temp += ", " + cl;
+                    } else {
+                        subChunks.push(temp);
+                        temp = cl;
+                    }
+                }
+                if (temp) {
+                    // Nếu 1 mệnh đề vẫn dài hơn maxChunkLen -> cắt theo từ
+                    while (temp.length > maxChunkLen) {
+                        let cutIdx = temp.lastIndexOf(" ", maxChunkLen);
+                        if (cutIdx <= 0) cutIdx = maxChunkLen;
+                        subChunks.push(temp.substring(0, cutIdx).trim());
+                        temp = temp.substring(cutIdx).trim();
+                    }
+                    if (temp) subChunks.push(temp);
+                }
+            }
+        }
+
+        // Gom các câu quá ngắn (< 30 ký tự) vào câu kế tiếp nếu tổng độ dài vẫn <= maxChunkLen
+        const merged = [];
+        let buffer = "";
+
+        for (const s of subChunks) {
+            if (!buffer) {
+                buffer = s;
+            } else if ((buffer.length < 30 || s.length < 15) && (buffer.length + 1 + s.length <= maxChunkLen)) {
+                buffer += ". " + s;
+            } else {
+                merged.push(buffer);
+                buffer = s;
+            }
+        }
+        if (buffer) merged.push(buffer);
+
+        return merged.length > 0 ? merged : [clean.substring(0, maxChunkLen)];
     }
 
     async speakText(text, btnElement = null) {
         if (!text) return;
 
-        // Dừng các âm thanh cũ
-        if (this.currentBotAudio) {
-            this.currentBotAudio.pause();
-            this.currentBotAudio = null;
-        }
-        if (window.speechSynthesis) {
-            window.speechSynthesis.cancel();
+        this.stopCurrentSpeech();
+        const sessionToken = this.speechSessionToken;
+        this.currentUtteranceText = text;
+        this.currentBotSpeakBtn = btnElement;
+        if (!this.activeAudioElements) {
+            this.activeAudioElements = new Set();
         }
 
-        const selectedVoice = this.settings.voice || "vi-VN-HoaiMyNeural";
-        const selectedSpeed = parseFloat(this.settings.voiceSpeed || 1.0);
-
+        // Đổi nút sang trạng thái "Dừng" ngay lập tức để người dùng có thể bấm dừng bất kỳ lúc nào
         if (btnElement) {
             btnElement.classList.add("active");
             const span = btnElement.querySelector("span");
-            if (span) span.textContent = "Tải...";
+            if (span) span.textContent = "Dừng";
             const icon = btnElement.querySelector("i");
-            if (icon) icon.className = "fa-solid fa-spinner fa-spin";
+            if (icon) icon.className = "fa-solid fa-stop";
         }
 
-        this.currentUtteranceText = text;
+        const selectedSpeed = parseFloat(this.settings.voiceSpeed || 1.0);
+        const voiceInfo = this.getActiveVoiceInfo();
 
-        try {
-            // 1. Gọi Backend TTS (Edge-TTS / gTTS + Cache MD5)
-            const resp = await fetch("/api/tts", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    text: text,
-                    voice: selectedVoice
-                })
-            });
+        this.setVoiceBadgeSpeakingState(btnElement, true, voiceInfo.shortName);
 
-            if (resp.ok) {
-                const data = await resp.json();
-                if (data.audio_url) {
-                    const audio = new Audio(data.audio_url);
-                    audio.playbackRate = selectedSpeed;
-                    this.currentBotAudio = audio;
-                    this.currentBotSpeakBtn = btnElement;
-
-                    if (btnElement) {
-                        const span = btnElement.querySelector("span");
-                        if (span) span.textContent = "Dừng";
-                        const icon = btnElement.querySelector("i");
-                        if (icon) icon.className = "fa-solid fa-volume-high";
-                    }
-
-                    audio.addEventListener("ended", () => {
-                        if (btnElement) {
-                            btnElement.classList.remove("active");
-                            const span = btnElement.querySelector("span");
-                            if (span) span.textContent = "Đọc";
-                            const icon = btnElement.querySelector("i");
-                            if (icon) icon.className = "fa-solid fa-volume-high";
-                        }
-                        this.currentBotAudio = null;
-                        this.currentBotSpeakBtn = null;
-                        this.currentUtteranceText = null;
-                    });
-
-                    audio.addEventListener("error", (err) => {
-                        console.warn("[TTS] Lỗi phát file audio từ server, chuyển sang fallback Web Speech:", err);
-                        this.fallbackClientSpeech(text, btnElement, selectedSpeed);
-                    });
-
-                    await audio.play();
-                    return;
-                }
-            }
-
-            // Nếu Backend lỗi -> Chuyển sang fallback Web Speech API
-            console.warn("[TTS] Backend trả về lỗi, chuyển sang fallback Web Speech.");
-            this.fallbackClientSpeech(text, btnElement, selectedSpeed);
-
-        } catch (fetchErr) {
-            console.warn("[TTS] Không kết nối được API /api/tts, chuyển sang fallback Web Speech:", fetchErr);
-            this.fallbackClientSpeech(text, btnElement, selectedSpeed);
-        }
-    }
-
-    fallbackClientSpeech(text, btnElement, speed = 1.0) {
-        if (!('speechSynthesis' in window)) {
-            if (btnElement) {
-                btnElement.classList.remove("active");
-                const span = btnElement.querySelector("span");
-                if (span) span.textContent = "Đọc";
-                const icon = btnElement.querySelector("i");
-                if (icon) icon.className = "fa-solid fa-volume-high";
-            }
-            this.showToast("Không thể phát giọng nói trên thiết bị này.", "error");
+        // CHẾ ĐỘ 1 (0.05s): Nếu trình duyệt có giọng tiếng Việt bản địa (Edge Hoài My/Nam Minh, Windows An...)
+        // -> Phát trực tiếp bằng Web Speech API (không qua Backend)
+        if (voiceInfo.mode === "native" && voiceInfo.voiceObj && window.speechSynthesis) {
+            this.playViaNativeSpeech(text, voiceInfo, selectedSpeed, btnElement, sessionToken);
             return;
         }
 
-        const plainText = text
-            .replace(/[#*_`~\[\]\(\)>|]/g, " ")
-            .replace(/https?:\/\/\S+/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
+        // CHẾ ĐỘ 2: Trình duyệt không có giọng Việt phù hợp -> tạo âm thanh qua Backend (/api/tts)
+        const sentences = this.splitIntoSentences(text, 170);
+        if (sentences.length === 0) {
+            this.stopCurrentSpeech();
+            return;
+        }
+
+        await this.startSentenceStreamingQueue(sentences, voiceInfo, selectedSpeed, btnElement, sessionToken);
+    }
+
+    playViaNativeSpeech(text, voiceInfo, speed, btnElement, sessionToken) {
+        const plainText = this.normalizeTextForSpeech(text);
+        const viVoice = voiceInfo.voiceObj;
 
         const utterance = new SpeechSynthesisUtterance(plainText);
-        utterance.lang = "vi-VN";
+        utterance.lang = viVoice.lang || "vi-VN";
+        utterance.voice = viVoice;
         utterance.rate = speed;
-
-        const voices = window.speechSynthesis.getVoices();
-        const viVoice = voices.find(v => v.lang.includes("vi") || v.name.includes("Vietnamese"));
-        if (viVoice) {
-            utterance.voice = viVoice;
-        } else {
-            console.warn("Không tìm thấy gói giọng tiếng Việt trong trình duyệt client.");
-        }
+        this.currentUtterance = utterance;
 
         if (btnElement) {
             btnElement.classList.add("active");
             const span = btnElement.querySelector("span");
             if (span) span.textContent = "Dừng";
             const icon = btnElement.querySelector("i");
-            if (icon) icon.className = "fa-solid fa-volume-high";
+            if (icon) icon.className = "fa-solid fa-stop";
         }
+        this.setVoiceBadgeSpeakingState(btnElement, true, voiceInfo.shortName);
 
         utterance.onend = () => {
-            if (btnElement) {
-                btnElement.classList.remove("active");
-                const span = btnElement.querySelector("span");
-                if (span) span.textContent = "Đọc";
-                const icon = btnElement.querySelector("i");
-                if (icon) icon.className = "fa-solid fa-volume-high";
+            if (this.speechSessionToken === sessionToken) {
+                this.stopCurrentSpeech();
             }
-            this.currentUtteranceText = null;
         };
 
-        utterance.onerror = () => {
-            if (btnElement) {
-                btnElement.classList.remove("active");
-                const span = btnElement.querySelector("span");
-                if (span) span.textContent = "Đọc";
-                const icon = btnElement.querySelector("i");
-                if (icon) icon.className = "fa-solid fa-volume-high";
+        utterance.onerror = (e) => {
+            if (this.speechSessionToken === sessionToken) {
+                this.stopCurrentSpeech();
             }
-            this.currentUtteranceText = null;
         };
 
+        // Đảm bảo không còn utterance cũ nào đang xếp hàng
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
         window.speechSynthesis.speak(utterance);
+    }
+
+    async startSentenceStreamingQueue(sentences, voiceInfo, speed, btnElement, sessionToken) {
+        this.sentenceQueue = sentences;
+        this.sentenceIndex = 0;
+        this.isPlayingSentenceQueue = true;
+        this.prefetchAudios = new Map();
+        this.ttsAbortController = new AbortController();
+        const abortSignal = this.ttsAbortController.signal;
+
+        if (!this.activeAudioElements) {
+            this.activeAudioElements = new Set();
+        }
+
+        const registerAudio = (audioEl) => {
+            if (audioEl) {
+                this.activeAudioElements.add(audioEl);
+            }
+            return audioEl;
+        };
+
+        // Hàm tải file âm thanh cho từng câu (Có cache, hủy ngay lập tức nếu đổi câu/dừng)
+        const getSentenceAudio = async (idx) => {
+            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return null;
+            if (idx >= sentences.length) return null;
+            if (this.prefetchAudios.has(idx)) {
+                return await this.prefetchAudios.get(idx);
+            }
+
+            const sentenceText = sentences[idx];
+
+            const loadPromise = (async () => {
+                try {
+                    const resp = await fetch("/api/tts", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            text: sentenceText,
+                            voice: voiceInfo.backendVoice || "google-vi"
+                        }),
+                        signal: abortSignal
+                    });
+                    if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return null;
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        if (data.audio_url && this.speechSessionToken === sessionToken && this.isPlayingSentenceQueue) {
+                            const audio = new Audio(data.audio_url);
+                            audio.preload = "auto";
+                            audio.playbackRate = speed;
+                            registerAudio(audio);
+                            return audio;
+                        }
+                    }
+                } catch (err) {
+                    if (err.name !== "AbortError") {
+                        console.warn(`[TTS Queue] Lỗi tải câu ${idx}:`, err);
+                    }
+                }
+                return null;
+            })();
+
+            this.prefetchAudios.set(idx, loadPromise);
+            return await loadPromise;
+        };
+
+        const playNextSentence = async () => {
+            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) {
+                return;
+            }
+            if (this.sentenceIndex >= this.sentenceQueue.length) {
+                if (this.speechSessionToken === sessionToken) {
+                    this.stopCurrentSpeech();
+                }
+                return;
+            }
+
+            const currentIdx = this.sentenceIndex;
+            const audio = await getSentenceAudio(currentIdx);
+
+            // Kiểm tra nghiêm ngặt token phiên: nếu người dùng đã bấm Dừng hoặc sang câu mới -> ngắt ngay
+            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue || !audio) {
+                return;
+            }
+
+            // DỪNG CÂU CŨ TRƯỚC: Tuyệt đối chỉ có DUY NHẤT 1 audio phát tại 1 thời điểm!
+            if (this.currentBotAudio && this.currentBotAudio !== audio) {
+                try {
+                    this.currentBotAudio.pause();
+                    this.currentBotAudio.muted = true;
+                    this.currentBotAudio.currentTime = 0;
+                } catch (e) {}
+            }
+            this.currentBotAudio = audio;
+
+            if (btnElement) {
+                btnElement.classList.add("active");
+                const span = btnElement.querySelector("span");
+                if (span) span.textContent = "Dừng";
+                const icon = btnElement.querySelector("i");
+                if (icon) icon.className = "fa-solid fa-stop";
+            }
+            this.setVoiceBadgeSpeakingState(btnElement, true, voiceInfo.shortName);
+
+            // TẢI TRƯỚC (PREFETCH) câu tiếp theo ngầm
+            if (currentIdx + 1 < this.sentenceQueue.length) {
+                getSentenceAudio(currentIdx + 1);
+            }
+
+            let hasAdvanced = false;
+            const advanceToNextSentence = () => {
+                if (hasAdvanced || this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+                hasAdvanced = true;
+                this.sentenceIndex++;
+                playNextSentence();
+            };
+
+            audio.onended = () => {
+                advanceToNextSentence();
+            };
+
+            audio.onerror = (err) => {
+                console.warn(`[TTS Audio error câu ${currentIdx}]`, err);
+                advanceToNextSentence();
+            };
+
+            try {
+                await audio.play();
+            } catch (playErr) {
+                if (playErr.name === "AbortError" || this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) {
+                    return;
+                }
+                console.warn("[TTS Play error]", playErr);
+                advanceToNextSentence();
+            }
+        };
+
+        await playNextSentence();
     }
 
     // =========================================================================

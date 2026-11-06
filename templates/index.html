@@ -21,7 +21,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/style.css?v=5">
+    <link rel="stylesheet" href="/static/css/style.css?v=9">
 </head>
 <body>
     <div class="app-layout">
@@ -407,12 +407,16 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="voiceSelect">Giọng đọc Trợ lý (Neural Voice tiếng Việt)</label>
+                    <label for="voiceSelect">Giọng đọc Trợ lý</label>
                     <select id="voiceSelect" class="form-select">
-                        <option value="vi-VN-HoaiMyNeural" selected>Giọng Nữ Bắc Bộ (Hoài My - Tự nhiên, chuẩn truyền thanh)</option>
-                        <option value="vi-VN-NamMinhNeural">Giọng Nam Bắc Bộ (Nam Minh - Trầm ấm, truyền cảm)</option>
+                        <option value="female" selected>Giọng Nữ</option>
+                        <option value="male">Giọng Nam</option>
                     </select>
-                    <small class="form-help">Công nghệ Edge-TTS + gTTS: Phát âm thanh đồng nhất 100% trên Chrome, Edge, Cốc Cốc.</small>
+                    <div class="voice-current-status" id="voiceCurrentStatusBox">
+                        <i class="fa-solid fa-microphone-lines"></i>
+                        <span>Đang dùng giọng: <strong id="currentVoiceNameDisplay">Đang kiểm tra trình duyệt...</strong></span>
+                    </div>
+                    <small class="form-help">Ưu tiên giọng tiếng Việt có sẵn trên trình duyệt/Windows. Nếu trình duyệt chưa có giọng phù hợp, hệ thống sẽ tạo giọng qua máy chủ.</small>
                 </div>
 
                 <div class="form-group">
@@ -504,6 +508,6 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- APP JAVASCRIPT -->
-    <script src="/static/js/app.js?v=5"></script>
+    <script src="/static/js/app.js?v=10"></script>
 </body>
 </html>

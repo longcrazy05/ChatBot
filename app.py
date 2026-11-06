@@ -5,10 +5,12 @@ import time
 import uuid
 import json
 import shutil
+import hashlib
 import requests
 import subprocess
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor
 import document_parser
 import voice_service
 
@@ -214,40 +216,272 @@ def extract_user_doc_topics(session_id):
     return unique_kw[:12]
 
 
-def query_user_documents(query, session_id, n_results=4, custom_api_key=None):
-    """Truy vấn các đoạn văn bản từ các tài liệu do người dùng tải lên, đảm bảo luôn có trang mở đầu."""
+VI_STOPWORDS = {
+    "là", "gì", "có", "của", "trong", "cho", "với", "như", "thế", "nào",
+    "bao", "nhiêu", "file", "tài", "liệu", "này", "đó", "các", "những",
+    "được", "không", "hãy", "về", "theo", "tại", "và", "hoặc", "thì",
+    "mà", "ở", "khi", "nếu", "để", "từ", "đến", "cần", "phải", "một"
+}
+
+_query_embedding_cache = {}
+
+
+def ensure_session_in_chromadb(session_id, coll=None, custom_api_key=None):
+    """
+    Tự phục hồi dữ liệu theo từng file: Nếu ChromaDB bị mất vector nhưng file _extracted.json
+    vẫn còn trong user_uploads/{session_id}, tự động khôi phục ngay từ vector đã lưu trong JSON
+    (0ms, không tốn API) hoặc tạo lại vector nếu JSON cũ chưa có embeddings.
+    """
+    if not session_id:
+        return
+    session_dir = os.path.join(USER_UPLOADS_DIR, session_id)
+    if not os.path.exists(session_dir):
+        return
+
+    try:
+        if coll is None:
+            coll = get_user_vector_db()
+        existing = coll.get(where={"session_id": session_id}, include=["metadatas"])
+        existing_files_in_db = set()
+        if existing and existing.get("metadatas"):
+            for m in existing["metadatas"]:
+                if m and m.get("filename"):
+                    existing_files_in_db.add(m["filename"])
+
+        active_key = (custom_api_key or "").strip() or API_KEY
+        for item in os.listdir(session_dir):
+            if not item.endswith("_extracted.json"):
+                continue
+            json_path = os.path.join(session_dir, item)
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            fname = data.get("filename", item.replace("_extracted.json", ""))
+            if fname in existing_files_in_db:
+                continue
+
+            chunks = data.get("chunks", [])
+            if not chunks:
+                continue
+
+            cached_embeddings = data.get("embeddings")
+            if not cached_embeddings or len(cached_embeddings) != len(chunks):
+                chunk_texts = [c["text"] for c in chunks]
+                cached_embeddings = document_parser.batch_get_embeddings(chunk_texts, api_key=active_key)
+
+            valid_ids, valid_emb, valid_docs, valid_metas = [], [], [], []
+            now_ts = data.get("uploaded_at", time.time())
+            for idx, (c, emb) in enumerate(zip(chunks, cached_embeddings)):
+                if emb:
+                    valid_ids.append(f"{session_id}_{fname}_{idx}_{int(now_ts)}")
+                    valid_emb.append(emb)
+                    valid_docs.append(c["text"])
+                    valid_metas.append({
+                        "session_id": session_id,
+                        "filename": fname,
+                        "page": c.get("page", 1),
+                        "chunk_index": c.get("chunk_index", idx),
+                        "created_at": now_ts
+                    })
+            if valid_ids:
+                coll.add(ids=valid_ids, embeddings=valid_emb, documents=valid_docs, metadatas=valid_metas)
+                print(f"[*] Tự động phục hồi {len(valid_ids)} chunks của '{fname}' (session '{session_id}') từ cache đĩa.")
+    except Exception as e:
+        print(f"[!] Warning during ensure_session_in_chromadb: {e}")
+
+
+def keyword_search_user_docs(query, session_id, coll=None):
+    """
+    Tìm kiếm kết hợp từ khóa & cụm từ (N-gram + Technical Tokens) trên tài liệu người dùng tải lên,
+    đã loại bỏ hư từ tiếng Việt (stopwords) để chấm điểm chính xác các thuật ngữ, mục lục, con số.
+    """
+    if not session_id or not query:
+        return []
+    q_lower = query.lower().strip()
+    raw_words = [w for w in re.findall(r"[\w\.\+\-#%]+", q_lower) if len(w) > 1]
+    q_words = [w for w in raw_words if w not in VI_STOPWORDS]
+    if not q_words:
+        q_words = raw_words
+    if not q_words:
+        return []
+
+    try:
+        if coll is None:
+            coll = get_user_vector_db()
+        all_docs = coll.get(where={"session_id": session_id}, include=["documents", "metadatas"])
+        if not all_docs or not all_docs.get("documents"):
+            return []
+
+        results = []
+        for doc, meta in zip(all_docs["documents"], all_docs["metadatas"]):
+            d_lower = doc.lower()
+            score = 0
+
+            # 1. Khớp nguyên câu hoặc cụm từ liền kề (2-gram, 3-gram)
+            if len(q_lower) > 4 and q_lower in d_lower:
+                score += 160
+            else:
+                for l in range(min(len(q_words), 4), 1, -1):
+                    for start in range(len(q_words) - l + 1):
+                        subphrase = " ".join(q_words[start:start + l])
+                        if len(subphrase) > 3 and subphrase in d_lower:
+                            score += 35 * l
+
+            # 2. Khớp từng từ khóa chuyên môn / số mục
+            for w in q_words:
+                cnt = d_lower.count(w)
+                if cnt > 0:
+                    # Ưu tiên cao hơn cho từ khóa chứa chữ số, ký hiệu kỹ thuật (VD: 2.3, socket, c++)
+                    weight = 35 if any(ch.isdigit() or ch in ".+-#%" for ch in w) else 20
+                    score += weight * min(cnt, 4)
+
+            if score > 0:
+                results.append({
+                    "content": doc,
+                    "filename": meta.get("filename", "Tài liệu người dùng"),
+                    "page": meta.get("page", 1),
+                    "chunk_index": meta.get("chunk_index", 0),
+                    "source_type": "user_doc",
+                    "score": score
+                })
+
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results[:4]
+    except Exception as e:
+        print(f"[!] Error in keyword_search_user_docs: {e}")
+        return []
+
+
+def _merge_overlapping_text(base_text, next_text):
+    """Ghép nối 2 đoạn văn bản liền kề và loại bỏ phần trùng lặp (chunk_overlap) ở biên."""
+    if not base_text:
+        return next_text
+    if not next_text:
+        return base_text
+    max_overlap = min(250, len(base_text), len(next_text))
+    for size in range(max_overlap, 25, -1):
+        if base_text[-size:] == next_text[:size]:
+            return base_text + next_text[size:]
+    return base_text + "\n" + next_text
+
+
+def expand_neighbor_chunks(top_candidates, session_id, coll=None):
+    """
+    Kỹ thuật Neighbor Chunk Expansion:
+    Với các ứng viên có điểm cao nhất (Top 1 - Top 2), tự động lấy đoạn kế tiếp (chunk_index + 1)
+    trong cùng file để ghép nối liền mạch (loại bỏ phần lặp overlap), giúp bảng biểu/định nghĩa
+    không bị cắt cụt giữa chừng mà vẫn bảo toàn đủ số lượng n_results đoạn khác nhau.
+    """
+    if not top_candidates or not session_id:
+        return top_candidates
+
+    try:
+        if coll is None:
+            coll = get_user_vector_db()
+
+        existing_pairs = {(c.get("filename"), c.get("chunk_index")) for c in top_candidates}
+
+        for idx, item in enumerate(top_candidates[:2]):
+            fname = item.get("filename")
+            c_idx = item.get("chunk_index")
+            if fname is None or c_idx is None:
+                continue
+            next_idx = c_idx + 1
+            if (fname, next_idx) in existing_pairs:
+                continue
+
+            res_next = coll.get(
+                where={"$and": [
+                    {"session_id": session_id},
+                    {"filename": fname},
+                    {"chunk_index": next_idx}
+                ]},
+                include=["documents", "metadatas"]
+            )
+            if res_next and res_next.get("documents") and len(res_next["documents"]) > 0:
+                next_doc = res_next["documents"][0]
+                item["content"] = _merge_overlapping_text(item["content"], next_doc)
+                existing_pairs.add((fname, next_idx))
+
+        return top_candidates
+    except Exception as e:
+        print(f"[!] Error in expand_neighbor_chunks: {e}")
+        return top_candidates
+
+
+def query_user_documents(query, session_id, n_results=4, custom_api_key=None, query_embedding=None):
+    """
+    Truy vấn kết hợp Hybrid Search (Cosine Similarity Distance + Keyword N-gram Match)
+    kèm kỹ thuật Neighbor Chunk Expansion cho tài liệu người dùng tải lên.
+    """
     if not session_id:
         return []
+
+    coll = get_user_vector_db()
+
+    # 0. Tự phục hồi dữ liệu từ file _extracted.json nếu ChromaDB bị thiếu vector của phiên
+    ensure_session_in_chromadb(session_id, coll, custom_api_key)
+
     matched = []
-    q_vec = get_embedding_rest(query, api_key=custom_api_key)
+    # 1. Vector Search có tính điểm khoảng cách Cosine (Cosine Distance Scoring)
+    q_vec = query_embedding or get_embedding_rest(query, api_key=custom_api_key)
     if q_vec:
         try:
-            coll = get_user_vector_db()
             res = coll.query(
                 query_embeddings=[q_vec],
-                n_results=n_results,
-                where={"session_id": session_id}
+                n_results=n_results * 2,
+                where={"session_id": session_id},
+                include=["documents", "metadatas", "distances"]
             )
             if res and res.get("documents") and len(res["documents"]) > 0:
-                for doc, meta in zip(res["documents"][0], res["metadatas"][0]):
+                docs_list = res["documents"][0]
+                metas_list = res["metadatas"][0]
+                dists_list = res.get("distances", [[]])[0] if res.get("distances") else [0.3] * len(docs_list)
+                for rank_idx, (doc, meta, dist) in enumerate(zip(docs_list, metas_list, dists_list)):
+                    sim_score = max(15.0, (1.0 - float(dist)) * 120.0) + max(0, (n_results * 2 - rank_idx) * 5)
                     matched.append({
                         "content": doc,
                         "filename": meta.get("filename", "Tài liệu người dùng"),
                         "page": meta.get("page", 1),
-                        "source_type": "user_doc"
+                        "chunk_index": meta.get("chunk_index", 0),
+                        "source_type": "user_doc",
+                        "score": sim_score
                     })
         except Exception as e:
             print(f"[!] Error querying user docs: {e}")
 
-    # Luôn bổ sung chunk mở đầu (Trang 1 chứa tên môn/tiêu đề) nếu chưa có
-    intro_chunks = get_session_intro_chunks(session_id)
-    seen_contents = {m["content"] for m in matched}
-    for it in intro_chunks:
-        if it["content"] not in seen_contents:
-            matched.insert(0, it)
-            seen_contents.add(it["content"])
+    # 2. Keyword & Subphrase Search trên toàn bộ chunks của session_id
+    keyword_hits = keyword_search_user_docs(query, session_id, coll)
 
-    return matched[:max(n_results, len(intro_chunks))]
+    # 3. Kết hợp và xếp hạng (Hybrid Rank Fusion)
+    combined_map = {}
+
+    for item in matched:
+        key = (item.get("filename"), item.get("chunk_index"))
+        combined_map[key] = dict(item)
+
+    for kw_item in keyword_hits:
+        key = (kw_item.get("filename"), kw_item.get("chunk_index"))
+        if key in combined_map:
+            combined_map[key]["score"] = combined_map[key].get("score", 0) + kw_item.get("score", 0) + 60
+        else:
+            combined_map[key] = dict(kw_item)
+
+    combined = sorted(combined_map.values(), key=lambda x: x.get("score", 0), reverse=True)
+    top_candidates = combined[:n_results]
+
+    # 4. Kỹ thuật Neighbor Chunk Expansion: Ghép nối liền mạch đoạn kế tiếp (chunk_index + 1)
+    expanded_candidates = expand_neighbor_chunks(top_candidates, session_id, coll)
+
+    # 5. Luôn bổ sung chunk mở đầu (Trang 1 chứa tên môn/tiêu đề) nếu chưa có
+    intro_chunks = get_session_intro_chunks(session_id)
+    seen_keys = {(m.get("filename"), m.get("chunk_index")) for m in expanded_candidates}
+    for it in intro_chunks:
+        it_key = (it.get("filename"), it.get("chunk_index", 0))
+        if it_key not in seen_keys and all(it["content"] not in m["content"] for m in expanded_candidates):
+            expanded_candidates.insert(0, it)
+            seen_keys.add(it_key)
+
+    return expanded_candidates[:max(n_results + 1, len(intro_chunks))]
 
 
 # ==============================================================================
@@ -287,17 +521,27 @@ def call_gemini_rest_api(prompt, model_name, api_key=API_KEY, timeout=25):
 
 
 def get_embedding_rest(text, api_key=API_KEY, timeout=3.0):
-    """Tạo vector embedding cho câu hỏi qua REST API."""
+    """Tạo vector embedding cho câu hỏi qua REST API (có bộ nhớ đệm LRU trong RAM để tăng tốc)."""
+    if not text:
+        return None
+    norm_text = text.strip()
+    if norm_text in _query_embedding_cache:
+        return _query_embedding_cache[norm_text]
+
     clean_key = api_key.strip() if api_key else API_KEY
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={clean_key}"
-    payload = {"content": {"parts": [{"text": text}]}}
+    payload = {"content": {"parts": [{"text": norm_text}]}}
     headers = {"Content-Type": "application/json"}
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
         if resp.status_code == 200:
             data = resp.json()
             if "embedding" in data and "values" in data["embedding"]:
-                return data["embedding"]["values"]
+                vec = data["embedding"]["values"]
+                if len(_query_embedding_cache) >= 256:
+                    _query_embedding_cache.pop(next(iter(_query_embedding_cache)))
+                _query_embedding_cache[norm_text] = vec
+                return vec
     except Exception:
         pass
     return None
@@ -463,13 +707,13 @@ def keyword_search_all(query, processed_dir=PROCESSED_DIR, top_k=3):
     return results[:top_k]
 
 
-def smart_query_knowledge_base(query, n_results=4, custom_api_key=None):
-    """Truy vấn kết hợp Hybrid Search (Keyword + Vector) và mở rộng trang cha."""
+def smart_query_knowledge_base(query, n_results=4, custom_api_key=None, query_embedding=None):
+    """Truy vấn kết hợp Hybrid Search (Keyword + Vector) và mở rộng trang cha (hỗ trợ tái sử dụng vector có sẵn)."""
     active_key = custom_api_key.strip() if (custom_api_key and custom_api_key.strip()) else API_KEY
     matched_chunks = []
 
     try:
-        q_vec = get_embedding_rest(query, active_key, timeout=3.0)
+        q_vec = query_embedding or get_embedding_rest(query, active_key, timeout=3.0)
         if q_vec:
             collection = get_vector_db()
             res = collection.query(query_embeddings=[q_vec], n_results=n_results)
@@ -790,31 +1034,55 @@ def upload_documents():
                 "error": f"File '{fname}' vượt quá dung lượng tối đa 5MB cho phép."
             }), 400
 
-        try:
-            chunks = document_parser.extract_chunks_from_document(file_bytes, fname)
-        except ValueError as ve:
-            return jsonify({"error": str(ve)}), 400
-        except Exception as ex:
-            return jsonify({"error": f"Lỗi xử lý file '{fname}': {str(ex)}"}), 500
-
-        # LƯU FILE GỐC CỦA CLIENT VÀ DỮ LIỆU TRÍCH XUẤT VÀO user_uploads/{session_id}/
+        file_hash = hashlib.md5(file_bytes).hexdigest()
         session_dir = os.path.join(USER_UPLOADS_DIR, session_id)
         os.makedirs(session_dir, exist_ok=True)
+        base_name = os.path.splitext(fname)[0]
+        extracted_json_path = os.path.join(session_dir, f"{base_name}_extracted.json")
+
+        # 0. Kiểm tra Cache MD5 nếu người dùng tải lại đúng file cũ không thay đổi
+        chunks = None
+        embeddings = None
+        if os.path.exists(extracted_json_path):
+            try:
+                with open(extracted_json_path, "r", encoding="utf-8") as f_cached:
+                    cached_data = json.load(f_cached)
+                if cached_data.get("file_hash") == file_hash and cached_data.get("chunks") and cached_data.get("embeddings"):
+                    chunks = cached_data["chunks"]
+                    embeddings = cached_data["embeddings"]
+            except Exception:
+                pass
+
+        if chunks is None:
+            try:
+                chunks = document_parser.extract_chunks_from_document(file_bytes, fname)
+            except ValueError as ve:
+                return jsonify({"error": str(ve)}), 400
+            except Exception as ex:
+                return jsonify({"error": f"Lỗi xử lý file '{fname}': {str(ex)}"}), 500
+
+        # LƯU FILE GỐC CỦA CLIENT VÀO user_uploads/{session_id}/
         saved_file_path = os.path.join(session_dir, fname)
         with open(saved_file_path, "wb") as f_out:
             f_out.write(file_bytes)
 
-        base_name = os.path.splitext(fname)[0]
-        extracted_json_path = os.path.join(session_dir, f"{base_name}_extracted.json")
+        if embeddings is None:
+            chunk_texts = [c["text"] for c in chunks]
+            embeddings = document_parser.batch_get_embeddings(chunk_texts, api_key=active_key)
+
+        now_ts = time.time()
+        # LƯU DỮ LIỆU TRÍCH XUẤT KÈM HASH & EMBEDDINGS ĐỂ PHỤC HỒI TỨC THÌ (0ms)
         try:
             with open(extracted_json_path, "w", encoding="utf-8") as f_json:
                 json.dump({
                     "filename": fname,
                     "session_id": session_id,
-                    "uploaded_at": time.time(),
+                    "file_hash": file_hash,
+                    "uploaded_at": now_ts,
                     "total_chunks": len(chunks),
-                    "chunks": chunks
-                }, f_json, ensure_ascii=False, indent=2)
+                    "chunks": chunks,
+                    "embeddings": embeddings
+                }, f_json, ensure_ascii=False)
         except Exception as e_json:
             print(f"[!] Warning saving extracted json: {e_json}")
 
@@ -824,14 +1092,10 @@ def upload_documents():
             except Exception:
                 pass
 
-        chunk_texts = [c["text"] for c in chunks]
-        embeddings = document_parser.batch_get_embeddings(chunk_texts, api_key=active_key)
-
         valid_ids = []
         valid_embeddings = []
         valid_docs = []
         valid_metas = []
-        now_ts = time.time()
 
         for idx, (c, emb) in enumerate(zip(chunks, embeddings)):
             if emb:
@@ -1023,9 +1287,34 @@ def chat():
         user_docs = query_user_documents(question, session_id, n_results=top_k, custom_api_key=custom_api_key)
     elif effective_scope == "ptit_only":
         ptit_docs = smart_query_knowledge_base(question, n_results=top_k, custom_api_key=custom_api_key)
-    else:  # hybrid: Quota Retrieval (4 user chunks + 4 ptit chunks)
-        user_docs = query_user_documents(question, session_id, n_results=4, custom_api_key=custom_api_key)
-        ptit_docs = smart_query_knowledge_base(ptit_search_query, n_results=4, custom_api_key=custom_api_key)
+    else:  # hybrid: Quota Retrieval chạy song song (Parallel) & Tối ưu 1 lần gọi Embedding API duy nhất
+        active_key = custom_api_key if custom_api_key else API_KEY
+        if ptit_search_query == question:
+            q_vec_user = get_embedding_rest(question, active_key, timeout=3.0)
+            q_vec_ptit = q_vec_user
+        else:
+            batch_vecs = document_parser.batch_get_embeddings([question, ptit_search_query], api_key=active_key, timeout=4.0)
+            q_vec_user = batch_vecs[0] if len(batch_vecs) > 0 else None
+            q_vec_ptit = batch_vecs[1] if len(batch_vecs) > 1 else q_vec_user
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_user = executor.submit(
+                query_user_documents,
+                question,
+                session_id,
+                4,
+                custom_api_key,
+                q_vec_user
+            )
+            future_ptit = executor.submit(
+                smart_query_knowledge_base,
+                ptit_search_query,
+                4,
+                custom_api_key,
+                q_vec_ptit
+            )
+            user_docs = future_user.result()
+            ptit_docs = future_ptit.result()
 
     context_sections = []
     if user_docs:
@@ -1072,6 +1361,9 @@ def reset():
         try:
             coll = get_user_vector_db()
             coll.delete(where={"session_id": session_id})
+            session_dir = os.path.join(USER_UPLOADS_DIR, session_id)
+            if os.path.exists(session_dir):
+                shutil.rmtree(session_dir, ignore_errors=True)
         except Exception:
             pass
     return jsonify({"status": "success", "message": "Đã làm mới phiên hội thoại và dọn dẹp tài liệu tải lên."})
