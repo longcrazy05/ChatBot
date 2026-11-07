@@ -56,12 +56,14 @@ class PTITChatApp {
         this.sessions = [];
         this.settings = {
             apiKey: "",
-            model: "gemini-3.1-flash-lite",
+            model: "gemini-2.5-flash-lite",
             topK: 4,
             autoVoice: false,
+            showLatency: false,
             voice: "female",
             voiceSpeed: 1.0
         };
+        this.lastBenchmark = null;
         this.currentBotAudio = null;
         this.currentBotSpeakBtn = null;
         this.currentCategory = "all";
@@ -134,6 +136,7 @@ class PTITChatApp {
         this.suggestionsGrid = document.getElementById("suggestionsGrid");
 
         // Input Form
+        this.inputTopBar = document.getElementById("inputTopBar");
         this.chatForm = document.getElementById("chatForm");
         this.userInput = document.getElementById("userInput");
         this.sendBtn = document.getElementById("sendBtn");
@@ -187,6 +190,10 @@ class PTITChatApp {
         this.topKInput = document.getElementById("topKInput");
         this.topKValue = document.getElementById("topKValue");
         this.autoVoiceToggle = document.getElementById("autoVoiceToggle");
+        this.showLatencyToggle = document.getElementById("showLatencyToggle");
+        this.statTtftDisplay = document.getElementById("statTtftDisplay");
+        this.statTotalDisplay = document.getElementById("statTotalDisplay");
+        this.statModelDisplay = document.getElementById("statModelDisplay");
         this.voiceSelect = document.getElementById("voiceSelect");
         this.voiceSpeedSelect = document.getElementById("voiceSpeedSelect");
         this.currentVoiceNameDisplay = document.getElementById("currentVoiceNameDisplay");
@@ -207,14 +214,14 @@ class PTITChatApp {
         this.themeToggleBtn.addEventListener("click", () => this.toggleTheme());
 
         // Sidebar Mobile
-        this.openSidebarBtn.addEventListener("click", () => this.sidebar.classList.add("open"));
-        this.closeSidebarBtn.addEventListener("click", () => this.sidebar.classList.remove("open"));
+        if (this.openSidebarBtn) this.openSidebarBtn.addEventListener("click", () => this.sidebar && this.sidebar.classList.add("open"));
+        if (this.closeSidebarBtn) this.closeSidebarBtn.addEventListener("click", () => this.sidebar && this.sidebar.classList.remove("open"));
 
         // Sessions
-        this.newChatBtn.addEventListener("click", () => this.createNewSession());
-        this.clearAllHistoryBtn.addEventListener("click", () => this.clearAllHistory());
-        this.clearCurrentChatBtn.addEventListener("click", () => this.clearCurrentChat());
-        this.exportChatBtn.addEventListener("click", () => this.exportCurrentChat());
+        if (this.newChatBtn) this.newChatBtn.addEventListener("click", () => this.createNewSession());
+        if (this.clearAllHistoryBtn) this.clearAllHistoryBtn.addEventListener("click", () => this.clearAllHistory());
+        if (this.clearCurrentChatBtn) this.clearCurrentChatBtn.addEventListener("click", () => this.clearCurrentChat());
+        if (this.exportChatBtn) this.exportChatBtn.addEventListener("click", () => this.exportCurrentChat());
 
         // Chat Input & Auto-grow
         this.userInput.addEventListener("input", () => this.autoGrowTextarea());
@@ -306,15 +313,26 @@ class PTITChatApp {
 
     getModelDisplayLabel(modelId) {
         const labels = {
-            "gemini-3.5-flash-lite": "3.5 Flash-Lite (Khuyên dùng)",
-            "gemini-flash-lite-latest": "Flash Lite Latest (Nhanh)",
-            "gemini-3-flash-preview": "3 Flash Preview",
-            "gemini-3.1-flash-lite-preview": "3.1 Flash Lite Preview",
-            "gemini-3.5-flash": "3.5 Flash (Cân bằng)",
-            "gemini-3.8-flash": "3.8 Flash (Chất lượng cao)",
-            "gemini-pro-latest": "Pro (Lý luận)"
+            "gemini-2.5-flash-lite": "2.5 Flash-Lite (Khuyên dùng)",
+            "gemini-flash-lite-latest": "Flash-Lite Latest (Nhanh)",
+            "gemini-2.5-flash": "2.5 Flash (Cân bằng)",
+            "gemini-flash-latest": "Flash Latest (Tiêu chuẩn)",
+            "gemini-3-flash-preview": "3.0 Flash Preview",
+            "gemini-3.1-flash-lite-preview": "3.1 Flash-Lite Preview",
+            "gemini-2.0-flash": "2.0 Flash (Ổn định)",
+            "gemini-2.0-flash-lite": "2.0 Flash-Lite (Tiết kiệm)"
         };
-        return labels[modelId] || modelId;
+        const aliasMap = {
+            "gemini-3.1-flash-lite": "gemini-2.5-flash-lite",
+            "gemini-3.5-flash-lite": "gemini-2.5-flash-lite",
+            "gemini-3.5-flash": "gemini-2.5-flash",
+            "gemini-3.6-flash": "gemini-2.5-flash",
+            "gemini-3.7-flash": "gemini-2.5-flash",
+            "gemini-3.8-flash": "gemini-2.5-flash",
+            "gemini-pro-latest": "gemini-2.5-flash"
+        };
+        const resolved = aliasMap[modelId] || modelId;
+        return labels[resolved] || labels[modelId] || modelId;
     }
 
     initQuickModelSelector() {
@@ -325,7 +343,7 @@ class PTITChatApp {
         const quickSelect = document.getElementById("quickModelSelect");
 
         this.updateQuickModelUI = (modelValue) => {
-            const currentModel = modelValue || this.settings.model || "gemini-3.5-flash-lite";
+            const currentModel = modelValue || this.settings.model || "gemini-2.5-flash-lite";
             if (label) {
                 label.textContent = this.getModelDisplayLabel(currentModel);
             }
@@ -379,7 +397,7 @@ class PTITChatApp {
                     popup.classList.remove("show");
                     wrapper.classList.remove("active");
                     btn.setAttribute("aria-expanded", "false");
-                    this.showToast(`Đã chuyển sang mô hình: ${selectedModel}`, "success");
+                    this.showToast(`Đã chuyển sang mô hình: ${this.getModelDisplayLabel(selectedModel)}`, "success");
                 }
             });
         });
@@ -409,13 +427,19 @@ class PTITChatApp {
                 this.updateQuickModelUI(this.settings.model);
             });
         }
+
+        if (this.modelSelect) {
+            this.modelSelect.addEventListener("change", (e) => {
+                this.updateQuickModelUI(e.target.value);
+            });
+        }
     }
 
     autoGrowTextarea() {
         this.userInput.style.height = "auto";
         const newHeight = Math.min(this.userInput.scrollHeight, 160);
-        this.userInput.style.height = (newHeight > 38 ? newHeight : 38) + "px";
-        if (newHeight > 46) {
+        this.userInput.style.height = (newHeight > 30 ? newHeight : 30) + "px";
+        if (newHeight > 38) {
             this.chatForm.classList.add("multiline");
         } else {
             this.chatForm.classList.remove("multiline");
@@ -451,17 +475,29 @@ class PTITChatApp {
             try {
                 this.settings = { ...this.settings, ...JSON.parse(savedSettings) };
                 const validModels = [
-                    "gemini-3.1-flash-lite",
-                    "gemini-3.5-flash-lite",
+                    "gemini-2.5-flash-lite",
                     "gemini-flash-lite-latest",
-                    "gemini-3-flash-preview",
-                    "gemini-3.6-flash",
+                    "gemini-2.5-flash",
                     "gemini-flash-latest",
-                    "gemini-3.5-flash",
-                    "gemini-3.7-flash"
+                    "gemini-3-flash-preview",
+                    "gemini-3.1-flash-lite-preview",
+                    "gemini-2.0-flash",
+                    "gemini-2.0-flash-lite"
                 ];
-                if (!this.settings.model || !validModels.includes(this.settings.model) || this.settings.model === "gemini-2.5-flash" || this.settings.model === "gemini-3.6-flash") {
-                    this.settings.model = "gemini-3.1-flash-lite";
+                const aliasMap = {
+                    "gemini-3.1-flash-lite": "gemini-2.5-flash-lite",
+                    "gemini-3.5-flash-lite": "gemini-2.5-flash-lite",
+                    "gemini-3.5-flash": "gemini-2.5-flash",
+                    "gemini-3.6-flash": "gemini-2.5-flash",
+                    "gemini-3.7-flash": "gemini-2.5-flash",
+                    "gemini-3.8-flash": "gemini-2.5-flash",
+                    "gemini-pro-latest": "gemini-2.5-flash"
+                };
+                if (this.settings.model && aliasMap[this.settings.model]) {
+                    this.settings.model = aliasMap[this.settings.model];
+                }
+                if (!this.settings.model || !validModels.includes(this.settings.model)) {
+                    this.settings.model = "gemini-2.5-flash-lite";
                     localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
                 }
             } catch (e) {
@@ -475,14 +511,32 @@ class PTITChatApp {
 
     openSettingsModal() {
         this.customApiKeyInput.value = this.settings.apiKey || "";
-        this.modelSelect.value = this.settings.model || "gemini-3.1-flash-lite";
+        this.modelSelect.value = this.settings.model || "gemini-2.5-flash-lite";
         this.topKInput.value = this.settings.topK || 4;
         this.topKValue.textContent = this.topKInput.value;
         this.autoVoiceToggle.checked = !!this.settings.autoVoice;
+        if (this.showLatencyToggle) this.showLatencyToggle.checked = !!this.settings.showLatency;
         if (this.voiceSelect) this.voiceSelect.value = /namminh|male/i.test(this.settings.voice || "") && !/^female$/i.test(this.settings.voice) ? "male" : "female";
         if (this.voiceSpeedSelect) this.voiceSpeedSelect.value = String(this.settings.voiceSpeed || 1.0);
         this.updateVoiceStatusUI(this.voiceSelect ? this.voiceSelect.value : this.settings.voice);
+        this.updateBenchmarkSettingsDisplay();
         this.settingsModal.classList.add("active");
+    }
+
+    updateBenchmarkSettingsDisplay() {
+        if (!this.statTtftDisplay || !this.statTotalDisplay || !this.statModelDisplay) return;
+        if (!this.lastBenchmark) {
+            this.statTtftDisplay.textContent = "Chưa có lượt đo nào";
+            this.statTotalDisplay.textContent = "Chưa có lượt đo nào";
+            this.statModelDisplay.textContent = "—";
+            return;
+        }
+        const b = this.lastBenchmark;
+        const ttftText = b.ttftMs ? `${(b.ttftMs / 1000).toFixed(2)}s (${b.ttftMs}ms)` : (b.isCached ? "0.01s (Trúng cache LRU)" : "—");
+        const totalText = b.totalMs ? `${(b.totalMs / 1000).toFixed(2)}s (${b.totalMs}ms)` : "—";
+        this.statTtftDisplay.textContent = ttftText;
+        this.statTotalDisplay.textContent = totalText;
+        this.statModelDisplay.textContent = b.modelUsed || "—";
     }
 
     saveSettings() {
@@ -490,6 +544,7 @@ class PTITChatApp {
         this.settings.model = this.modelSelect.value;
         this.settings.topK = parseInt(this.topKInput.value, 10) || 4;
         this.settings.autoVoice = this.autoVoiceToggle.checked;
+        if (this.showLatencyToggle) this.settings.showLatency = this.showLatencyToggle.checked;
         if (this.voiceSelect) this.settings.voice = this.voiceSelect.value;
         if (this.voiceSpeedSelect) this.settings.voiceSpeed = parseFloat(this.voiceSpeedSelect.value) || 1.0;
 
@@ -501,32 +556,47 @@ class PTITChatApp {
             this.updateQuickModelUI(this.settings.model);
         }
         this.updateVoiceStatusUI(this.settings.voice);
+        this.toggleLatencyBadgesInDOM();
         this.settingsModal.classList.remove("active");
-        this.showToast("Đã lưu cấu hình RAG thành công!", "success");
+        this.showToast("Đã lưu cài đặt!", "success");
+    }
+
+    toggleLatencyBadgesInDOM() {
+        const isShow = !!this.settings.showLatency;
+        document.querySelectorAll(".msg-latency-badge").forEach(badge => {
+            badge.style.display = isShow ? "inline-flex" : "none";
+        });
     }
 
     resetSettings() {
         this.settings = {
             apiKey: "",
-            model: "gemini-3.1-flash-lite",
+            model: "gemini-2.5-flash-lite",
             topK: 4,
             autoVoice: false,
+            showLatency: false,
             voice: "female",
             voiceSpeed: 1.0
         };
+        this.lastBenchmark = null;
         this.customApiKeyInput.value = "";
-        this.modelSelect.value = "gemini-3.1-flash-lite";
+        this.modelSelect.value = "gemini-2.5-flash-lite";
         this.topKInput.value = 4;
         this.topKValue.textContent = "4";
         this.autoVoiceToggle.checked = false;
+        if (this.showLatencyToggle) this.showLatencyToggle.checked = false;
         if (this.voiceSelect) this.voiceSelect.value = "female";
         if (this.voiceSpeedSelect) this.voiceSpeedSelect.value = "1.0";
         localStorage.removeItem("ptit_chat_settings");
-        this.modelBadgeDisplay.textContent = "gemini-3.1-flash-lite";
+        if (this.modelBadgeDisplay) {
+            this.modelBadgeDisplay.textContent = "gemini-2.5-flash-lite";
+        }
         if (this.updateQuickModelUI) {
-            this.updateQuickModelUI("gemini-3.1-flash-lite");
+            this.updateQuickModelUI("gemini-2.5-flash-lite");
         }
         this.updateVoiceStatusUI("female");
+        this.updateBenchmarkSettingsDisplay();
+        this.toggleLatencyBadgesInDOM();
         this.showToast("Đã khôi phục cài đặt mặc định.", "info");
     }
 
@@ -584,6 +654,7 @@ class PTITChatApp {
         this.sessions.unshift(newSession);
         this.saveSessions();
         this.uploadedFiles = [];
+        this.pendingAttachedFiles = [];
         this.renderUploadedFiles([]);
         this.setScope("ptit_only");
         this.switchSession(newSession.id);
@@ -599,7 +670,10 @@ class PTITChatApp {
         const session = this.sessions.find(s => s.id === sessionId);
         if (!session) return;
 
-        this.currentChatTitle.textContent = session.title;
+        this.uploadedFiles = [];
+        this.pendingAttachedFiles = [];
+        this.renderUploadedFiles([], false);
+        if (this.currentChatTitle) this.currentChatTitle.textContent = session.title;
         this.renderMessages(session.messages);
         this.renderHistoryList();
         this.fetchSessionDocs(sessionId);
@@ -611,7 +685,7 @@ class PTITChatApp {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ session_id: sessionId })
-        }).catch(() => {});
+        }).catch(() => { });
         this.sessions = this.sessions.filter(s => s.id !== sessionId);
         this.saveSessions();
 
@@ -631,13 +705,13 @@ class PTITChatApp {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ session_id: this.currentSessionId })
-            }).catch(() => {});
+            }).catch(() => { });
             this.uploadedFiles = [];
             this.renderUploadedFiles([]);
             this.setScope("ptit_only");
             session.messages = [];
             session.title = "Đoạn chat mới";
-            this.currentChatTitle.textContent = session.title;
+            if (this.currentChatTitle) this.currentChatTitle.textContent = session.title;
             this.saveSessions();
             this.renderMessages([]);
             this.showToast("Đã xóa nội dung đoạn chat và tài liệu tải lên.", "info");
@@ -646,6 +720,13 @@ class PTITChatApp {
 
     clearAllHistory() {
         if (confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch sử trò chuyện?")) {
+            this.sessions.forEach(s => {
+                fetch("/api/session-docs", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: s.id })
+                }).catch(() => { });
+            });
             this.sessions = [];
             localStorage.removeItem("ptit_chat_sessions");
             this.createNewSession();
@@ -680,18 +761,119 @@ class PTITChatApp {
         this.messageThread.innerHTML = "";
         if (!messages || messages.length === 0) {
             this.welcomeHero.style.display = "flex";
+            if (this.inputTopBar) this.inputTopBar.style.display = "block";
             return;
         }
 
         this.welcomeHero.style.display = "none";
+        if (this.inputTopBar) this.inputTopBar.style.display = "none";
         messages.forEach(msg => {
             this.appendMessageToDOM(msg, false);
         });
         this.scrollToBottom();
     }
 
+    renderBotMarkdownIntoBubble(bubbleDiv, rawContent, isFinal = true) {
+        if (!bubbleDiv) return;
+        let textToRender = rawContent || "";
+        textToRender = textToRender.replace(/\$\s*\\ge(q)?\s*([^$]+)\$/g, "từ $2 trở lên");
+        textToRender = textToRender.replace(/\$\s*\\le(q)?\s*([^$]+)\$/g, "dưới hoặc bằng $2");
+        textToRender = textToRender.replace(/\$\s*\\ge(q)?\s*\$/g, "từ ");
+        textToRender = textToRender.replace(/\$\s*\\le(q)?\s*\$/g, "dưới hoặc bằng ");
+        textToRender = textToRender.replace(/\\ge(q)?\b/g, ">=");
+        textToRender = textToRender.replace(/\\le(q)?\b/g, "<=");
+        textToRender = textToRender.replace(/\$([^$]+)\$/g, "$1");
+        textToRender = textToRender.replace(/\$/g, "");
+
+        let htmlContent = textToRender;
+        if (window.marked) {
+            htmlContent = marked.parse(textToRender);
+        }
+        bubbleDiv.innerHTML = htmlContent;
+
+        // Wrap any tables in table-wrapper for horizontal scroll and clean formatting
+        bubbleDiv.querySelectorAll("table").forEach(table => {
+            if (!table.parentElement.classList.contains("table-wrapper")) {
+                const wrap = document.createElement("div");
+                wrap.className = "table-wrapper";
+                table.parentNode.insertBefore(wrap, table);
+                wrap.appendChild(table);
+            }
+
+            if (isFinal) {
+                // Loại bỏ dòng đánh số cột scan rác như: | 1 | 2 | 3 | 4 | 5 |
+                table.querySelectorAll("tbody tr").forEach(row => {
+                    const cells = Array.from(row.querySelectorAll("td"));
+                    const isDummyCounterRow = cells.length >= 3 && cells.every((td, idx) => {
+                        const val = td.textContent.trim().replace(/\*/g, "");
+                        return val === "" || val === String(idx + 1);
+                    });
+                    if (isDummyCounterRow) {
+                        row.remove();
+                        return;
+                    }
+
+                    // Loại bỏ dòng tiêu đề nhóm hoặc ô rác (ví dụ: | III | Khóa 2025 | | |)
+                    const nonEmpties = cells.filter(td => td.textContent.trim() !== "");
+                    if (nonEmpties.length <= 1) {
+                        row.remove();
+                        return;
+                    }
+                });
+
+                // Chuẩn hóa cột STT (1, 2, 3...) nếu cột đầu tiên là STT hoặc TT
+                const headers = Array.from(table.querySelectorAll("th"));
+                if (headers.length > 0) {
+                    const firstHeader = headers[0].textContent.trim().toUpperCase();
+                    if (firstHeader === "STT" || firstHeader === "TT") {
+                        let sttCounter = 1;
+                        table.querySelectorAll("tbody tr").forEach(row => {
+                            const cells = Array.from(row.querySelectorAll("td"));
+                            if (cells.length > 0) {
+                                cells[0].textContent = sttCounter++;
+                                cells[0].style.textAlign = "center";
+                                cells[0].style.fontWeight = "600";
+                            }
+                        });
+                    }
+                }
+            }
+
+            // Căn chỉnh số tiền và đơn vị, tuyệt đối không ngắt dòng số hoặc đơn vị
+            table.querySelectorAll("td").forEach(td => {
+                const txt = td.textContent.trim();
+                if (/^\d{1,3}(\.\d{3})+(\s*đ|\s*đồng|\s*VNĐ)?$/i.test(txt) || /đồng\/tín chỉ|VNĐ\/tín chỉ/i.test(txt)) {
+                    td.style.whiteSpace = "nowrap";
+                    td.style.fontWeight = "700";
+                    td.style.color = "var(--primary)";
+                    td.style.textAlign = "center";
+                }
+                if (/^Khóa\s*\d{4}/i.test(txt) || /^\d{4}/.test(txt)) {
+                    td.style.whiteSpace = "nowrap";
+                    td.style.textAlign = "center";
+                }
+            });
+        });
+    }
+
+    updateBotReferencedBadge(wrapperDiv, referencedFiles) {
+        if (!wrapperDiv) return;
+        let existingBadge = wrapperDiv.querySelector(".bot-msg-ref-badge");
+        if (referencedFiles && referencedFiles.length > 0) {
+            if (!existingBadge) {
+                existingBadge = document.createElement("div");
+                existingBadge.className = "bot-msg-ref-badge";
+                wrapperDiv.insertBefore(existingBadge, wrapperDiv.firstChild);
+            }
+            existingBadge.innerHTML = `<i class="fa-solid fa-file-circle-check"></i> <span>Dựa trên tài liệu: <strong>${referencedFiles.map(f => this.escapeHtml(f)).join(", ")}</strong></span>`;
+        } else if (existingBadge) {
+            existingBadge.remove();
+        }
+    }
+
     appendMessageToDOM(msg, shouldScroll = true) {
         this.welcomeHero.style.display = "none";
+        if (this.inputTopBar) this.inputTopBar.style.display = "none";
 
         const msgDiv = document.createElement("div");
         msgDiv.className = `chat-message ${msg.role === "user" ? "user-message" : "bot-message"}`;
@@ -734,97 +916,15 @@ class PTITChatApp {
                 bubbleDiv.appendChild(attachBox);
             }
         } else {
-            if (msg.referenced_files && msg.referenced_files.length > 0) {
-                const refBadge = document.createElement("div");
-                refBadge.className = "bot-msg-ref-badge";
-                refBadge.innerHTML = `<i class="fa-solid fa-file-circle-check"></i> <span>Dựa trên tài liệu: <strong>${msg.referenced_files.map(f => this.escapeHtml(f)).join(", ")}</strong></span>`;
-                wrapperDiv.appendChild(refBadge);
-            }
-            // Render Bot Markdown with LaTeX cleanup
-            let textToRender = msg.content || "";
-            textToRender = textToRender.replace(/\$\s*\\ge(q)?\s*([^$]+)\$/g, "từ $2 trở lên");
-            textToRender = textToRender.replace(/\$\s*\\le(q)?\s*([^$]+)\$/g, "dưới hoặc bằng $2");
-            textToRender = textToRender.replace(/\$\s*\\ge(q)?\s*\$/g, "từ ");
-            textToRender = textToRender.replace(/\$\s*\\le(q)?\s*\$/g, "dưới hoặc bằng ");
-            textToRender = textToRender.replace(/\\ge(q)?\b/g, ">=");
-            textToRender = textToRender.replace(/\\le(q)?\b/g, "<=");
-            textToRender = textToRender.replace(/\$([^$]+)\$/g, "$1");
-            textToRender = textToRender.replace(/\$/g, "");
-
-            let htmlContent = textToRender;
-            if (window.marked) {
-                htmlContent = marked.parse(textToRender);
-            }
-            bubbleDiv.innerHTML = htmlContent;
-
-            // Wrap any tables in table-wrapper for horizontal scroll and clean formatting
-            bubbleDiv.querySelectorAll("table").forEach(table => {
-                if (!table.parentElement.classList.contains("table-wrapper")) {
-                    const wrap = document.createElement("div");
-                    wrap.className = "table-wrapper";
-                    table.parentNode.insertBefore(wrap, table);
-                    wrap.appendChild(table);
-                }
-
-                // Loại bỏ dòng đánh số cột scan rác như: | 1 | 2 | 3 | 4 | 5 |
-                table.querySelectorAll("tbody tr").forEach(row => {
-                    const cells = Array.from(row.querySelectorAll("td"));
-                    const isDummyCounterRow = cells.length >= 3 && cells.every((td, idx) => {
-                        const val = td.textContent.trim().replace(/\*/g, "");
-                        return val === "" || val === String(idx + 1);
-                    });
-                    if (isDummyCounterRow) {
-                        row.remove();
-                        return;
-                    }
-
-                    // Loại bỏ dòng tiêu đề nhóm hoặc ô rác (ví dụ: | III | Khóa 2025 | | |)
-                    const nonEmpties = cells.filter(td => td.textContent.trim() !== "");
-                    if (nonEmpties.length <= 1) {
-                        row.remove();
-                        return;
-                    }
-                });
-
-                // Chuẩn hóa cột STT (1, 2, 3...) nếu cột đầu tiên là STT hoặc TT
-                const headers = Array.from(table.querySelectorAll("th"));
-                if (headers.length > 0) {
-                    const firstHeader = headers[0].textContent.trim().toUpperCase();
-                    if (firstHeader === "STT" || firstHeader === "TT") {
-                        let sttCounter = 1;
-                        table.querySelectorAll("tbody tr").forEach(row => {
-                            const cells = Array.from(row.querySelectorAll("td"));
-                            if (cells.length > 0) {
-                                cells[0].textContent = sttCounter++;
-                                cells[0].style.textAlign = "center";
-                                cells[0].style.fontWeight = "600";
-                            }
-                        });
-                    }
-                }
-
-                // Căn chỉnh số tiền và đơn vị, tuyệt đối không ngắt dòng số hoặc đơn vị
-                table.querySelectorAll("td").forEach(td => {
-                    const txt = td.textContent.trim();
-                    if (/^\d{1,3}(\.\d{3})+(\s*đ|\s*đồng|\s*VNĐ)?$/i.test(txt) || /đồng\/tín chỉ|VNĐ\/tín chỉ/i.test(txt)) {
-                        td.style.whiteSpace = "nowrap";
-                        td.style.fontWeight = "700";
-                        td.style.color = "var(--primary)";
-                        td.style.textAlign = "center";
-                    }
-                    if (/^Khóa\s*\d{4}/i.test(txt) || /^\d{4}/.test(txt)) {
-                        td.style.whiteSpace = "nowrap";
-                        td.style.textAlign = "center";
-                    }
-                });
-            });
-
-            // Sources display disabled per user request
+            this.updateBotReferencedBadge(wrapperDiv, msg.referenced_files);
+            this.renderBotMarkdownIntoBubble(bubbleDiv, msg.content || "", true);
         }
 
         wrapperDiv.appendChild(bubbleDiv);
 
-        // Action Buttons for Bot Message (Copy, TTS)
+        // Action Buttons for Bot Message (Copy, TTS, Benchmark latency)
+        let speakBtnRef = null;
+        let latencyBadgeRef = null;
         if (msg.role === "assistant") {
             const actionsDiv = document.createElement("div");
             actionsDiv.className = "msg-actions";
@@ -850,10 +950,37 @@ class PTITChatApp {
             speakBtn._voiceBadge = voiceBadge;
 
             speakBtn.addEventListener("click", () => this.toggleSpeech(msg.content, speakBtn));
+            speakBtnRef = speakBtn;
+
+            // Nút / Huy hiệu hiển thị Latency (Mặc định ẩn, bật/tắt trong Cài đặt hoặc click chuyển đổi)
+            const latencyBadge = document.createElement("span");
+            latencyBadge.className = "msg-latency-badge";
+            latencyBadge.style.display = this.settings.showLatency ? "inline-flex" : "none";
+            latencyBadge.style.alignItems = "center";
+            latencyBadge.style.gap = "4px";
+            latencyBadge.style.fontSize = "0.74rem";
+            latencyBadge.style.color = "var(--text-muted, #94a3b8)";
+            latencyBadge.style.padding = "2px 8px";
+            latencyBadge.style.borderRadius = "12px";
+            latencyBadge.style.background = "var(--bg-secondary, rgba(255,255,255,0.05))";
+            latencyBadge.style.border = "1px solid var(--border-color, rgba(255,255,255,0.08))";
+            latencyBadge.style.cursor = "default";
+
+            if (msg.benchmark) {
+                const b = msg.benchmark;
+                const ttft = b.ttftMs ? `${(b.ttftMs / 1000).toFixed(2)}s` : "0.01s";
+                const total = b.totalMs ? `${(b.totalMs / 1000).toFixed(2)}s` : "—";
+                latencyBadge.innerHTML = `<i class="fa-solid fa-bolt" style="color: #eab308;"></i> <span>TTFT: <strong>${ttft}</strong> | Tổng: <strong>${total}</strong></span>`;
+                latencyBadge.title = `Thời gian có chữ đầu tiên: ${ttft} | Tổng thời gian hoàn thành: ${total} | Model: ${msg.model_used || ''}`;
+            } else {
+                latencyBadge.innerHTML = `<i class="fa-solid fa-bolt" style="color: #eab308;"></i> <span>Đo tốc độ...</span>`;
+            }
+            latencyBadgeRef = latencyBadge;
 
             actionsDiv.appendChild(copyBtn);
             actionsDiv.appendChild(speakBtn);
             actionsDiv.appendChild(voiceBadge);
+            actionsDiv.appendChild(latencyBadge);
             wrapperDiv.appendChild(actionsDiv);
         }
 
@@ -862,6 +989,7 @@ class PTITChatApp {
 
         this.messageThread.appendChild(msgDiv);
         if (shouldScroll) this.scrollToBottom();
+        return { msgDiv, wrapperDiv, bubbleDiv, speakBtn: speakBtnRef, latencyBadge: latencyBadgeRef };
     }
 
     scrollToBottom() {
@@ -870,13 +998,16 @@ class PTITChatApp {
         }, 50);
     }
 
-    // SUBMIT QUESTION
+    // SUBMIT QUESTION (TỐI ƯU STREAMING SSE + CACHE PHẢN HỒI TỨC THÌ)
     async handleSubmit(customVoiceData = null) {
         const text = (customVoiceData && customVoiceData.text) ? customVoiceData.text : this.userInput.value.trim();
         if (!text || this.isProcessing) return;
 
         // Dừng giọng nói bot đang đọc nếu có
         this.stopCurrentSpeech();
+        // Mở khóa sẵn phần tử Audio chính ngay trong thao tác gửi câu hỏi (user gesture)
+        // để khi LLM trả lời xong sau > 5 giây, Chrome vẫn cho phép phát tự động
+        this.unlockBotAudioPlayer();
 
         // Reset Textarea
         this.userInput.value = "";
@@ -897,13 +1028,14 @@ class PTITChatApp {
         // Set title on first message
         if (currentSession.messages.length === 0) {
             currentSession.title = text.length > 32 ? text.substring(0, 32) + "..." : text;
-            this.currentChatTitle.textContent = currentSession.title;
+            if (this.currentChatTitle) this.currentChatTitle.textContent = currentSession.title;
         }
 
-        // Add User Message with attached files
-        const attachedFiles = (this.uploadedFiles && this.uploadedFiles.length > 0)
-            ? this.uploadedFiles.map(f => f.filename)
+        // Add User Message with attached files (chỉ gắn trên câu hỏi ngay sau lượt tải file)
+        const attachedFiles = (this.pendingAttachedFiles && this.pendingAttachedFiles.length > 0)
+            ? [...this.pendingAttachedFiles]
             : [];
+        this.pendingAttachedFiles = [];
         const userMsg = {
             role: "user",
             content: text,
@@ -921,11 +1053,13 @@ class PTITChatApp {
         this.isProcessing = true;
         this.sendBtn.disabled = true;
         this.typingIndicator.classList.remove("hidden");
-        this.typingLabel.textContent = "Đang tra cứu Vector DB & tạo câu trả lời...";
+        this.typingLabel.textContent = "Đang tra cứu & phản hồi...";
         this.scrollToBottom();
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000);
+        const timeoutId = setTimeout(() => controller.abort(), 35000);
+        const startTime = performance.now();
+        let firstChunkTime = null;
 
         try {
             const payload = {
@@ -938,56 +1072,147 @@ class PTITChatApp {
                 history: currentSession.messages.slice(-6)
             };
 
-            const response = await fetch("/api/chat", {
+            const response = await fetch("/api/chat/stream", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
                 signal: controller.signal
             });
-            clearTimeout(timeoutId);
 
-            const data = await response.json();
-
-            this.typingIndicator.classList.add("hidden");
-            this.isProcessing = false;
-            this.sendBtn.disabled = false;
-
-            if (data.error) {
-                const errorMsg = {
-                    role: "assistant",
-                    content: `❌ **Đã xảy ra lỗi:** ${data.error}`,
-                    sources: []
-                };
-                currentSession.messages.push(errorMsg);
-                this.saveSessions();
-                this.appendMessageToDOM(errorMsg, true);
-                return;
+            if (!response.ok || !response.body) {
+                throw new Error(`HTTP ${response.status}`);
             }
 
             const botMsg = {
                 role: "assistant",
-                content: data.answer || "Không nhận được phản hồi từ hệ thống.",
-                sources: data.sources || [],
-                model_used: data.model_used,
-                scope_used: data.scope_used || this.currentScope,
-                referenced_files: data.referenced_files || [],
+                content: "",
+                sources: [],
+                model_used: this.settings.model,
+                scope_used: this.currentScope,
+                referenced_files: [],
+                benchmark: null,
                 timestamp: new Date().toISOString()
             };
 
+            let domRefs = null;
+            let lastRenderTime = 0;
+            let liveVoiceSessionToken = null;
+
+            const ensureBotBubbleCreated = () => {
+                if (!domRefs) {
+                    this.typingIndicator.classList.add("hidden");
+                    domRefs = this.appendMessageToDOM(botMsg, true);
+                }
+            };
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = "";
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                const parts = buffer.split("\n\n");
+                buffer = parts.pop() || "";
+
+                for (const block of parts) {
+                    const line = block.trim();
+                    if (!line.startsWith("data:")) continue;
+                    const jsonStr = line.slice(5).trim();
+                    if (!jsonStr) continue;
+
+                    let ev = null;
+                    try {
+                        ev = JSON.parse(jsonStr);
+                    } catch (e) {
+                        continue;
+                    }
+
+                    if (ev.type === "meta") {
+                        botMsg.scope_used = ev.scope_used || this.currentScope;
+                        botMsg.referenced_files = ev.referenced_files || [];
+                    } else if (ev.type === "chunk" && ev.delta) {
+                        const now = performance.now();
+                        if (firstChunkTime === null) {
+                            firstChunkTime = now;
+                        }
+                        ensureBotBubbleCreated();
+                        botMsg.content += ev.delta;
+                        if (now - lastRenderTime >= 35) {
+                            this.renderBotMarkdownIntoBubble(domRefs.bubbleDiv, botMsg.content, false);
+                            this.chatMessagesArea.scrollTop = this.chatMessagesArea.scrollHeight;
+                            lastRenderTime = now;
+                        }
+                        // Đọc ngay câu đầu tiên khi đang stream câu trả lời (không chờ sinh xong toàn bộ)
+                        if (this.settings.autoVoice && domRefs && domRefs.speakBtn) {
+                            if (liveVoiceSessionToken === null || this.speechSessionToken === liveVoiceSessionToken) {
+                                liveVoiceSessionToken = this.feedLiveSpeech(botMsg.content, false, domRefs.speakBtn, liveVoiceSessionToken);
+                            }
+                        }
+                    } else if (ev.type === "done") {
+                        const endTime = performance.now();
+                        const ttftMs = Math.round((firstChunkTime || endTime) - startTime);
+                        const totalMs = Math.round(endTime - startTime);
+                        const benchmarkData = {
+                            ttftMs: ev.cached ? 10 : ttftMs,
+                            totalMs: ev.cached ? 15 : totalMs,
+                            modelUsed: ev.model_used || this.settings.model,
+                            isCached: !!ev.cached
+                        };
+                        botMsg.benchmark = benchmarkData;
+                        this.lastBenchmark = benchmarkData;
+
+                        ensureBotBubbleCreated();
+                        if (ev.answer) botMsg.content = ev.answer;
+                        if (ev.model_used) botMsg.model_used = ev.model_used;
+                        if (ev.scope_used) botMsg.scope_used = ev.scope_used;
+                        if (ev.referenced_files) botMsg.referenced_files = ev.referenced_files;
+                        this.updateBotReferencedBadge(domRefs.wrapperDiv, botMsg.referenced_files);
+
+                        // Cập nhật thẻ đo tốc độ trên tin nhắn
+                        if (domRefs.latencyBadge) {
+                            const ttftTxt = benchmarkData.isCached ? "0.01s (Cache)" : `${(benchmarkData.ttftMs / 1000).toFixed(2)}s`;
+                            const totalTxt = benchmarkData.isCached ? "0.01s" : `${(benchmarkData.totalMs / 1000).toFixed(2)}s`;
+                            domRefs.latencyBadge.innerHTML = `<i class="fa-solid fa-bolt" style="color: #eab308;"></i> <span>TTFT: <strong>${ttftTxt}</strong> | Tổng: <strong>${totalTxt}</strong></span>`;
+                            domRefs.latencyBadge.title = `Thời gian có chữ đầu tiên: ${ttftTxt} | Tổng thời gian: ${totalTxt} | Mô hình: ${botMsg.model_used}`;
+                            domRefs.latencyBadge.style.display = this.settings.showLatency ? "inline-flex" : "none";
+                        }
+
+                        this.renderBotMarkdownIntoBubble(domRefs.bubbleDiv, botMsg.content, true);
+                        this.updateBenchmarkSettingsDisplay();
+                        this.scrollToBottom();
+                    }
+                }
+            }
+
+            clearTimeout(timeoutId);
+            this.typingIndicator.classList.add("hidden");
+            this.isProcessing = false;
+            this.sendBtn.disabled = false;
+
+            if (!botMsg.content) {
+                botMsg.content = "Không nhận được phản hồi từ hệ thống.";
+                ensureBotBubbleCreated();
+                this.renderBotMarkdownIntoBubble(domRefs.bubbleDiv, botMsg.content, true);
+            }
+
             currentSession.messages.push(botMsg);
             this.saveSessions();
-            this.appendMessageToDOM(botMsg, true);
 
-            // Auto-voice if enabled
-            if (this.settings.autoVoice) {
-                const allSpeakBtns = this.messageThread.querySelectorAll(".msg-speak-btn");
-                const lastSpeakBtn = allSpeakBtns.length > 0 ? allSpeakBtns[allSpeakBtns.length - 1] : null;
-                this.speakText(botMsg.content, lastSpeakBtn);
+            // Auto-voice if enabled: đẩy phần câu cuối cùng vào hàng đợi đang đọc (hoặc bắt đầu đọc nếu câu quá ngắn/từ cache)
+            if (this.settings.autoVoice && domRefs && domRefs.speakBtn) {
+                if (liveVoiceSessionToken === null) {
+                    this.speakText(botMsg.content, domRefs.speakBtn);
+                } else if (this.speechSessionToken === liveVoiceSessionToken) {
+                    this.feedLiveSpeech(botMsg.content, true, domRefs.speakBtn, liveVoiceSessionToken);
+                }
             }
 
         } catch (err) {
             clearTimeout(timeoutId);
-            console.error("Fetch Error:", err);
+            console.error("Stream/Fetch Error:", err);
             this.typingIndicator.classList.add("hidden");
             this.isProcessing = false;
             this.sendBtn.disabled = false;
@@ -1022,8 +1247,8 @@ class PTITChatApp {
             const res = await fetch("/api/status");
             const data = await res.json();
             if (data.chunks_count !== undefined) {
-                this.totalChunksDisplay.textContent = `${data.chunks_count} Chunks`;
-                this.modalTotalChunks.textContent = `${data.chunks_count} Chunks`;
+                if (this.totalChunksDisplay) this.totalChunksDisplay.textContent = `${data.chunks_count} Chunks`;
+                if (this.modalTotalChunks) this.modalTotalChunks.textContent = `${data.chunks_count} Chunks`;
             }
         } catch (e) {
             console.warn("Could not fetch KB status:", e);
@@ -1075,6 +1300,54 @@ class PTITChatApp {
             }
         }
         setTimeout(() => this.updateVoiceStatusUI(), 350);
+
+        // Khởi tạo 1 phần tử Audio duy nhất để giữ quyền phát tự động (user activation) xuyên suốt phiên chat
+        if (!this.botAudioPlayer) {
+            this.botAudioPlayer = new Audio();
+            this.botAudioPlayer.preload = "auto";
+        }
+
+        // Mở khóa autoplay ở lần tương tác đầu tiên
+        const unlockAudio = () => {
+            this.unlockBotAudioPlayer();
+            document.removeEventListener("pointerdown", unlockAudio, true);
+            document.removeEventListener("keydown", unlockAudio, true);
+        };
+        document.addEventListener("pointerdown", unlockAudio, true);
+        document.addEventListener("keydown", unlockAudio, true);
+    }
+
+    unlockBotAudioPlayer() {
+        if (this.isPlayingSentenceQueue) return;
+        try {
+            if (!this.botAudioPlayer) {
+                this.botAudioPlayer = new Audio();
+                this.botAudioPlayer.preload = "auto";
+            }
+            const player = this.botAudioPlayer;
+            player.muted = true;
+            player.volume = 0;
+            player.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+            const p = player.play();
+            if (p && typeof p.then === "function") {
+                p.then(() => {
+                    if (!this.isPlayingSentenceQueue) {
+                        try {
+                            player.pause();
+                            player.currentTime = 0;
+                            player.muted = false;
+                            player.volume = 1;
+                        } catch (e) { }
+                    }
+                }).catch(() => {
+                    player.muted = false;
+                    player.volume = 1;
+                });
+            } else {
+                player.muted = false;
+                player.volume = 1;
+            }
+        } catch (e) { }
     }
 
     getActiveVoiceInfo(preferredVoiceSetting = null) {
@@ -1095,11 +1368,11 @@ class PTITChatApp {
         let chosen = null;
         if (wantMale) {
             chosen = viVoices.find(v => /namminh|nam minh/i.test(v.name))
-                  || viVoices.find(v => /\ban\b/i.test(v.name));
+                || viVoices.find(v => /\ban\b/i.test(v.name));
         } else {
             chosen = viVoices.find(v => /hoaimy|hoài my/i.test(v.name))
-                  || viVoices.find(v => /google/i.test(v.name))
-                  || viVoices.find(v => !isMaleName(v.name));
+                || viVoices.find(v => /google/i.test(v.name))
+                || viVoices.find(v => !isMaleName(v.name));
         }
 
         if (chosen) {
@@ -1177,6 +1450,10 @@ class PTITChatApp {
         // Tăng token phiên đọc để vô hiệu hóa tức thì mọi hàm async/promise đang chạy dở
         this.speechSessionToken = (this.speechSessionToken || 0) + 1;
         this.isPlayingSentenceQueue = false;
+        this.isLiveStreamComplete = true;
+        this.isWaitingForMoreSentences = false;
+        this.liveRawCursor = 0;
+        this.onLiveSentencesUpdated = null;
         this.sentenceQueue = [];
         this.sentenceIndex = 0;
         this.currentUtteranceText = null;
@@ -1185,7 +1462,7 @@ class PTITChatApp {
         if (this.ttsAbortController) {
             try {
                 this.ttsAbortController.abort();
-            } catch (e) {}
+            } catch (e) { }
             this.ttsAbortController = null;
         }
 
@@ -1202,21 +1479,38 @@ class PTITChatApp {
                         audioEl.pause();
                         audioEl.removeAttribute("src");
                         audioEl.load();
-                    } catch (e) {}
+                    } catch (e) { }
                 }
             });
             this.activeAudioElements.clear();
+        }
+
+        if (this.botAudioPlayer) {
+            try {
+                this.botAudioPlayer.onended = null;
+                this.botAudioPlayer.onerror = null;
+                this.botAudioPlayer.onplaying = null;
+                this.botAudioPlayer.oncanplay = null;
+                this.botAudioPlayer.pause();
+                this.botAudioPlayer.currentTime = 0;
+            } catch (e) { }
         }
 
         if (this.currentBotAudio) {
             try {
                 this.currentBotAudio.onended = null;
                 this.currentBotAudio.onerror = null;
-                this.currentBotAudio.muted = true;
+                this.currentBotAudio.onplaying = null;
                 this.currentBotAudio.pause();
-                this.currentBotAudio.removeAttribute("src");
-            } catch (e) {}
+            } catch (e) { }
             this.currentBotAudio = null;
+        }
+
+        if (this.ttsObjectUrls && this.ttsObjectUrls.length > 0) {
+            this.ttsObjectUrls.forEach(u => {
+                try { URL.revokeObjectURL(u); } catch (e) { }
+            });
+            this.ttsObjectUrls = [];
         }
 
         if (this.prefetchAudios) {
@@ -1233,7 +1527,7 @@ class PTITChatApp {
         if (window.speechSynthesis) {
             try {
                 window.speechSynthesis.cancel();
-            } catch (e) {}
+            } catch (e) { }
         }
 
         document.querySelectorAll(".msg-action-btn.active").forEach(b => {
@@ -1267,17 +1561,17 @@ class PTITChatApp {
 
         // 1. Loại bỏ các khối code, markdown, link, ký tự đặc biệt
         s = s.replace(/```[\s\S]*?```/g, " ")
-             .replace(/`[^`]*`/g, " ")
-             .replace(/\|[^\n]+\|/g, " ")
-             .replace(/[-:]{2,}\s*\|\s*[-:]{2,}/g, " ")
-             .replace(/!\[.*?\]\(.*?\)/g, " ")
-             .replace(/\[(.*?)\]\(.*?\)/g, "$1")
-             .replace(/https?:\/\/\S+/g, " ")
-             .replace(/[*_~#><]/g, " ")
-             .replace(/\$\s*\\ge(q)?\s*([^$]+)\$/g, "từ $2 trở lên")
-             .replace(/\$\s*\\le(q)?\s*([^$]+)\$/g, "dưới hoặc bằng $2")
-             .replace(/\$([^$]+)\$/g, "$1")
-             .replace(/\$/g, " ");
+            .replace(/`[^`]*`/g, " ")
+            .replace(/\|[^\n]+\|/g, " ")
+            .replace(/[-:]{2,}\s*\|\s*[-:]{2,}/g, " ")
+            .replace(/!\[.*?\]\(.*?\)/g, " ")
+            .replace(/\[(.*?)\]\(.*?\)/g, "$1")
+            .replace(/https?:\/\/\S+/g, " ")
+            .replace(/[*_~#><]/g, " ")
+            .replace(/\$\s*\\ge(q)?\s*([^$]+)\$/g, "từ $2 trở lên")
+            .replace(/\$\s*\\le(q)?\s*([^$]+)\$/g, "dưới hoặc bằng $2")
+            .replace(/\$([^$]+)\$/g, "$1")
+            .replace(/\$/g, " ");
 
         // 2. Chuẩn hóa số tiền và các số hàng triệu/nghìn có dấu chấm (VD: 1.410.000, 1.410.000 VNĐ, 550.000đ/tín chỉ)
         // Tránh lỗi Windows/Edge đọc "1.410.000" thành "một nghìn 4 trăm 10 không không không đồng"
@@ -1361,6 +1655,7 @@ class PTITChatApp {
 
         // Tiền xử lý chuẩn hóa toàn bộ văn bản (từ viết tắt, số tiền)
         const clean = this.normalizeTextForSpeech(text);
+        if (!clean) return [];
 
         // Chia theo dòng và dấu câu (. ! ? ;)
         const rawParts = clean.split(/[.!?;\n]+/);
@@ -1420,6 +1715,142 @@ class PTITChatApp {
         return merged.length > 0 ? merged : [clean.substring(0, maxChunkLen)];
     }
 
+    findLiveSentenceCutIndex(unprocessed, isFirstChunk = false) {
+        if (!unprocessed) return -1;
+
+        // Nếu mở đầu bằng dòng trống -> cắt bỏ dòng trống
+        const leadingWsMatch = unprocessed.match(/^\s*\n/);
+        if (leadingWsMatch) {
+            return leadingWsMatch[0].length;
+        }
+
+        // Nếu đang ở dòng bảng Markdown (bắt đầu bằng '|') hoặc đường kẻ ngang -> chờ tới hết dòng '\n'
+        const trimmedStart = unprocessed.replace(/^[ \t]+/, "");
+        if (trimmedStart.startsWith("|") || /^[-*_]{3,}/.test(trimmedStart)) {
+            const nlIdx = unprocessed.indexOf("\n");
+            return nlIdx >= 0 ? nlIdx + 1 : -1;
+        }
+
+        const minPunctLen = isFirstChunk ? 22 : 42;
+        const minClauseLen = isFirstChunk ? 32 : 95;
+
+        for (let i = 0; i < unprocessed.length; i++) {
+            const ch = unprocessed[i];
+            const nextCh = unprocessed[i + 1] || "";
+
+            // 1. Ngắt theo xuống dòng
+            if (ch === "\n") {
+                const lineText = unprocessed.slice(0, i).trim();
+                if (!lineText || lineText.startsWith("|")) {
+                    return i + 1;
+                }
+                if (lineText.length >= (isFirstChunk ? 16 : 28)) {
+                    return i + 1;
+                }
+            }
+
+            // 2. Ngắt theo dấu kết câu (. ! ? ;) có khoảng trắng phía sau (không ngắt số tiền 1.410.000)
+            if ((ch === "." || ch === "!" || ch === "?" || ch === ";") && /\s/.test(nextCh)) {
+                if (ch === ".") {
+                    const beforeDot = unprocessed.slice(0, i);
+                    // Không ngắt sau số thứ tự đầu mục (1., 2.) hoặc từ viết tắt học hàm/địa danh
+                    if (/(?:^|[\s(])(?:TS|PGS|GS|ThS|CN|KS|TP|Dr|Mr|Ms|Mrs|St|vs|v\.v|\d+)$/i.test(beforeDot)) {
+                        continue;
+                    }
+                }
+                if (i + 1 >= minPunctLen) {
+                    return i + 2;
+                }
+            }
+
+            // 3. Với câu đầu tiên (hoặc câu quá dài), ngắt sớm ở dấu phẩy/hai chấm để phát tiếng ngay lập tức
+            if ((ch === "," || ch === ":") && (nextCh === " " || nextCh === "\n")) {
+                if (i + 1 >= minClauseLen) {
+                    return i + 2;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    feedLiveSpeech(rawText, isFinal = false, btnElement = null, activeToken = null) {
+        if (!rawText) return activeToken;
+
+        // Nếu người dùng đã bấm "Dừng" trong lúc đang stream -> không tự phát tiếp nữa
+        if (activeToken !== null && this.speechSessionToken !== activeToken) {
+            return activeToken;
+        }
+
+        let cursor = activeToken === null ? 0 : (this.liveRawCursor || 0);
+        const newSentences = [];
+        let isFirst = activeToken === null && newSentences.length === 0;
+
+        while (cursor < rawText.length) {
+            const unprocessed = rawText.slice(cursor);
+            const cutIdx = this.findLiveSentenceCutIndex(unprocessed, isFirst);
+            if (cutIdx <= 0) break;
+
+            const segment = unprocessed.slice(0, cutIdx);
+            cursor += cutIdx;
+
+            const pieces = this.splitIntoSentences(segment, 170);
+            if (pieces.length > 0) {
+                newSentences.push(...pieces);
+                isFirst = false;
+            }
+        }
+
+        if (isFinal && cursor < rawText.length) {
+            const tail = rawText.slice(cursor);
+            cursor = rawText.length;
+            const tailPieces = this.splitIntoSentences(tail, 170);
+            if (tailPieces.length > 0) {
+                newSentences.push(...tailPieces);
+            }
+        }
+
+        // Chưa đủ 1 mệnh đề/câu hoàn chỉnh để đọc
+        if (activeToken === null && newSentences.length === 0) {
+            return null;
+        }
+
+        // Khởi tạo phiên đọc trực tiếp ngay khi có câu đầu tiên
+        if (activeToken === null) {
+            this.stopCurrentSpeech();
+            const sessionToken = this.speechSessionToken;
+            this.liveRawCursor = cursor;
+            this.isLiveStreamComplete = !!isFinal;
+            this.currentUtteranceText = rawText;
+            this.currentBotSpeakBtn = btnElement;
+
+            const selectedSpeed = parseFloat(this.settings.voiceSpeed || 1.0);
+            const voiceInfo = this.getActiveVoiceInfo();
+            this.setVoiceBadgeSpeakingState(btnElement, true, voiceInfo.shortName);
+
+            if (voiceInfo.mode === "native" && voiceInfo.voiceObj && window.speechSynthesis) {
+                this.startNativeStreamingQueue(newSentences, voiceInfo, selectedSpeed, btnElement, sessionToken, !isFinal);
+            } else {
+                this.startSentenceStreamingQueue(newSentences, voiceInfo, selectedSpeed, btnElement, sessionToken, !isFinal);
+            }
+            return sessionToken;
+        }
+
+        // Cập nhật thêm câu mới vào hàng đợi đang phát
+        this.liveRawCursor = cursor;
+        this.currentUtteranceText = rawText;
+        if (newSentences.length > 0) {
+            this.sentenceQueue.push(...newSentences);
+        }
+        if (isFinal) {
+            this.isLiveStreamComplete = true;
+        }
+        if ((newSentences.length > 0 || isFinal) && typeof this.onLiveSentencesUpdated === "function") {
+            this.onLiveSentencesUpdated();
+        }
+        return activeToken;
+    }
+
     async speakText(text, btnElement = null) {
         if (!text) return;
 
@@ -1427,6 +1858,7 @@ class PTITChatApp {
         const sessionToken = this.speechSessionToken;
         this.currentUtteranceText = text;
         this.currentBotSpeakBtn = btnElement;
+        this.isLiveStreamComplete = true;
         if (!this.activeAudioElements) {
             this.activeAudioElements = new Set();
         }
@@ -1453,13 +1885,97 @@ class PTITChatApp {
         }
 
         // CHẾ ĐỘ 2: Trình duyệt không có giọng Việt phù hợp -> tạo âm thanh qua Backend (/api/tts)
-        const sentences = this.splitIntoSentences(text, 170);
+        let sentences = this.splitIntoSentences(text, 170);
         if (sentences.length === 0) {
             this.stopCurrentSpeech();
             return;
         }
 
-        await this.startSentenceStreamingQueue(sentences, voiceInfo, selectedSpeed, btnElement, sessionToken);
+        // Cắt ngắn câu đầu tiên (<= ~70 ký tự) để Backend tạo giọng nhanh hơn -> bắt đầu đọc sớm hơn
+        if (sentences[0].length > 70) {
+            const first = sentences[0];
+            let cut = first.indexOf(",", 25);
+            if (cut < 0 || cut > 90) cut = first.lastIndexOf(" ", 70);
+            if (cut > 20) {
+                sentences = [first.slice(0, cut).replace(/[,\s]+$/, ""), first.slice(cut + 1).trim(), ...sentences.slice(1)].filter(Boolean);
+            }
+        }
+
+        await this.startSentenceStreamingQueue(sentences, voiceInfo, selectedSpeed, btnElement, sessionToken, false);
+    }
+
+    startNativeStreamingQueue(sentences, voiceInfo, speed, btnElement, sessionToken, isLiveStreaming = false) {
+        this.sentenceQueue = sentences;
+        this.sentenceIndex = 0;
+        this.isPlayingSentenceQueue = true;
+        this.isLiveStreamComplete = !isLiveStreaming;
+        this.isWaitingForMoreSentences = false;
+
+        if (btnElement) {
+            btnElement.classList.add("active");
+            const span = btnElement.querySelector("span");
+            if (span) span.textContent = "Dừng";
+            const icon = btnElement.querySelector("i");
+            if (icon) icon.className = "fa-solid fa-stop";
+        }
+        this.setVoiceBadgeSpeakingState(btnElement, true, voiceInfo.shortName);
+
+        const viVoice = voiceInfo.voiceObj;
+
+        const playNextNative = () => {
+            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+            if (this.sentenceIndex >= this.sentenceQueue.length) {
+                if (!this.isLiveStreamComplete) {
+                    this.isWaitingForMoreSentences = true;
+                    return;
+                }
+                if (this.speechSessionToken === sessionToken) {
+                    this.stopCurrentSpeech();
+                }
+                return;
+            }
+
+            this.isWaitingForMoreSentences = false;
+            const sentenceText = this.sentenceQueue[this.sentenceIndex];
+            const utterance = new SpeechSynthesisUtterance(sentenceText);
+            utterance.lang = viVoice.lang || "vi-VN";
+            utterance.voice = viVoice;
+            utterance.rate = speed;
+            this.currentUtterance = utterance;
+
+            utterance.onend = () => {
+                if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+                this.sentenceIndex++;
+                playNextNative();
+            };
+
+            utterance.onerror = () => {
+                if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+                this.sentenceIndex++;
+                playNextNative();
+            };
+
+            try {
+                window.speechSynthesis.resume();
+                window.speechSynthesis.speak(utterance);
+            } catch (e) {
+                this.sentenceIndex++;
+                playNextNative();
+            }
+        };
+
+        this.onLiveSentencesUpdated = () => {
+            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+            if (this.isWaitingForMoreSentences) {
+                this.isWaitingForMoreSentences = false;
+                playNextNative();
+            }
+        };
+
+        try {
+            window.speechSynthesis.cancel();
+        } catch (e) { }
+        setTimeout(() => playNextNative(), 80);
     }
 
     playViaNativeSpeech(text, voiceInfo, speed, btnElement, sessionToken) {
@@ -1493,67 +2009,110 @@ class PTITChatApp {
             }
         };
 
-        // Đảm bảo không còn utterance cũ nào đang xếp hàng
-        if (window.speechSynthesis) {
-            window.speechSynthesis.cancel();
-        }
-        window.speechSynthesis.speak(utterance);
+        // Chromium có lỗi: speak() ngay sau cancel() đôi khi bị bỏ qua (giao diện báo "đang đọc" nhưng không có tiếng).
+        // -> chờ một nhịp ngắn sau cancel(), và tự thử lại nếu utterance không thực sự bắt đầu.
+        let started = false;
+        utterance.onstart = () => { started = true; };
+
+        const speakOnce = (attempt) => {
+            if (this.speechSessionToken !== sessionToken || !window.speechSynthesis) return;
+            try {
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.resume();
+            } catch (e) { }
+            setTimeout(() => {
+                if (this.speechSessionToken !== sessionToken) return;
+                window.speechSynthesis.speak(utterance);
+                // Kiểm tra sau 1.2s: nếu chưa bắt đầu đọc -> thử lại (tối đa 2 lần)
+                setTimeout(() => {
+                    if (this.speechSessionToken !== sessionToken || started) return;
+                    if (attempt < 2) {
+                        speakOnce(attempt + 1);
+                    } else {
+                        this.stopCurrentSpeech();
+                        this.showToast("Trình duyệt không phát được giọng đọc. Vui lòng bấm Đọc để thử lại.", "error");
+                    }
+                }, 1200);
+            }, 120);
+        };
+        speakOnce(0);
     }
 
-    async startSentenceStreamingQueue(sentences, voiceInfo, speed, btnElement, sessionToken) {
+    async startSentenceStreamingQueue(sentences, voiceInfo, speed, btnElement, sessionToken, isLiveStreaming = false) {
         this.sentenceQueue = sentences;
         this.sentenceIndex = 0;
         this.isPlayingSentenceQueue = true;
+        this.isLiveStreamComplete = !isLiveStreaming;
+        this.isWaitingForMoreSentences = false;
         this.prefetchAudios = new Map();
+        this.ttsObjectUrls = [];
         this.ttsAbortController = new AbortController();
         const abortSignal = this.ttsAbortController.signal;
 
-        if (!this.activeAudioElements) {
-            this.activeAudioElements = new Set();
+        if (!this.botAudioPlayer) {
+            this.botAudioPlayer = new Audio();
+            this.botAudioPlayer.preload = "auto";
         }
 
-        const registerAudio = (audioEl) => {
-            if (audioEl) {
-                this.activeAudioElements.add(audioEl);
-            }
-            return audioEl;
-        };
-
-        // Hàm tải file âm thanh cho từng câu (Có cache, hủy ngay lập tức nếu đổi câu/dừng)
-        const getSentenceAudio = async (idx) => {
+        // Hàm tải URL âm thanh cho từng câu (tuần tự, có cache, hủy ngay lập tức nếu đổi câu/dừng)
+        const getSentenceAudioUrl = async (idx) => {
             if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return null;
-            if (idx >= sentences.length) return null;
+            if (idx >= this.sentenceQueue.length) return null;
             if (this.prefetchAudios.has(idx)) {
                 return await this.prefetchAudios.get(idx);
             }
 
-            const sentenceText = sentences[idx];
+            const sentenceText = (this.sentenceQueue[idx] || "").trim();
+            if (!sentenceText) return null;
 
             const loadPromise = (async () => {
-                try {
-                    const resp = await fetch("/api/tts", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            text: sentenceText,
-                            voice: voiceInfo.backendVoice || "google-vi"
-                        }),
-                        signal: abortSignal
-                    });
+                for (let attempt = 0; attempt < 3; attempt++) {
                     if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return null;
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        if (data.audio_url && this.speechSessionToken === sessionToken && this.isPlayingSentenceQueue) {
-                            const audio = new Audio(data.audio_url);
-                            audio.preload = "auto";
-                            audio.playbackRate = speed;
-                            registerAudio(audio);
-                            return audio;
+                    const attemptCtrl = new AbortController();
+                    const onGlobalAbort = () => attemptCtrl.abort();
+                    abortSignal.addEventListener("abort", onGlobalAbort);
+                    const attemptTimer = setTimeout(() => attemptCtrl.abort(), 4500);
+                    try {
+                        const resp = await fetch("/api/tts", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                text: sentenceText,
+                                voice: voiceInfo.backendVoice || "google-vi"
+                            }),
+                            signal: attemptCtrl.signal
+                        });
+                        if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return null;
+                        if (resp.ok) {
+                            const data = await resp.json();
+                            if (data.audio_url && this.speechSessionToken === sessionToken && this.isPlayingSentenceQueue) {
+                                // Tải trọn file MP3 về Blob để phát mượt từ RAM, không bị ngắt quãng
+                                try {
+                                    const audioResp = await fetch(data.audio_url, {
+                                        cache: "no-store",
+                                        signal: attemptCtrl.signal
+                                    });
+                                    if (audioResp.ok) {
+                                        const buf = await audioResp.arrayBuffer();
+                                        if (buf.byteLength > 512) {
+                                            const blob = new Blob([buf], { type: "audio/mpeg" });
+                                            const blobUrl = URL.createObjectURL(blob);
+                                            if (this.ttsObjectUrls) this.ttsObjectUrls.push(blobUrl);
+                                            return blobUrl;
+                                        }
+                                    }
+                                } catch (e) {
+                                    if (abortSignal.aborted) return null;
+                                }
+                                return `${data.audio_url}?t=${Date.now()}`;
+                            }
                         }
-                    }
-                } catch (err) {
-                    if (err.name !== "AbortError") {
-                        console.warn(`[TTS Queue] Lỗi tải câu ${idx}:`, err);
+                    } catch (err) {
+                        if (abortSignal.aborted) return null;
+                        console.warn(`[TTS Queue] Lỗi/timeout tải câu ${idx} (lần ${attempt + 1}):`, err.name || err);
+                    } finally {
+                        clearTimeout(attemptTimer);
+                        abortSignal.removeEventListener("abort", onGlobalAbort);
                     }
                 }
                 return null;
@@ -1563,35 +2122,18 @@ class PTITChatApp {
             return await loadPromise;
         };
 
-        const playNextSentence = async () => {
-            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) {
-                return;
-            }
-            if (this.sentenceIndex >= this.sentenceQueue.length) {
-                if (this.speechSessionToken === sessionToken) {
-                    this.stopCurrentSpeech();
-                }
-                return;
-            }
+        // Hiển thị trạng thái "Đang tạo giọng..." trong lúc chờ Backend tạo câu đầu tiên
+        const ttsStartTime = performance.now();
+        if (btnElement) {
+            btnElement.classList.add("active");
+            const span = btnElement.querySelector("span");
+            if (span) span.textContent = "Đang tạo giọng...";
+            const icon = btnElement.querySelector("i");
+            if (icon) icon.className = "fa-solid fa-spinner fa-spin";
+        }
 
-            const currentIdx = this.sentenceIndex;
-            const audio = await getSentenceAudio(currentIdx);
-
-            // Kiểm tra nghiêm ngặt token phiên: nếu người dùng đã bấm Dừng hoặc sang câu mới -> ngắt ngay
-            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue || !audio) {
-                return;
-            }
-
-            // DỪNG CÂU CŨ TRƯỚC: Tuyệt đối chỉ có DUY NHẤT 1 audio phát tại 1 thời điểm!
-            if (this.currentBotAudio && this.currentBotAudio !== audio) {
-                try {
-                    this.currentBotAudio.pause();
-                    this.currentBotAudio.muted = true;
-                    this.currentBotAudio.currentTime = 0;
-                } catch (e) {}
-            }
-            this.currentBotAudio = audio;
-
+        const markSpeakingActiveUI = () => {
+            if (this.speechSessionToken !== sessionToken) return;
             if (btnElement) {
                 btnElement.classList.add("active");
                 const span = btnElement.querySelector("span");
@@ -1600,11 +2142,60 @@ class PTITChatApp {
                 if (icon) icon.className = "fa-solid fa-stop";
             }
             this.setVoiceBadgeSpeakingState(btnElement, true, voiceInfo.shortName);
+        };
 
-            // TẢI TRƯỚC (PREFETCH) câu tiếp theo ngầm
-            if (currentIdx + 1 < this.sentenceQueue.length) {
-                getSentenceAudio(currentIdx + 1);
+        let loggedStart = false;
+        let failedSentences = 0;
+        let isCurrentAudioReady = false;
+
+        const playNextSentence = async () => {
+            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) {
+                return;
             }
+            if (this.sentenceIndex >= this.sentenceQueue.length) {
+                // Nếu LLM vẫn đang stream câu trả lời -> tạm chờ câu tiếp theo được đẩy vào hàng đợi
+                if (!this.isLiveStreamComplete) {
+                    this.isWaitingForMoreSentences = true;
+                    return;
+                }
+                if (this.speechSessionToken === sessionToken) {
+                    this.stopCurrentSpeech();
+                }
+                return;
+            }
+
+            this.isWaitingForMoreSentences = false;
+            isCurrentAudioReady = false;
+            const currentIdx = this.sentenceIndex;
+            // Chỉ tải ưu tiên câu hiện tại trước (không bắn 3 request cùng lúc gây nghẽn gTTS/Edge-TTS ở câu 0)
+            const srcUrl = await getSentenceAudioUrl(currentIdx);
+
+            // Người dùng đã bấm Dừng hoặc sang câu mới -> ngắt ngay
+            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) {
+                return;
+            }
+
+            if (!srcUrl) {
+                failedSentences++;
+                if (failedSentences >= 2 || (this.isLiveStreamComplete && currentIdx + 1 >= this.sentenceQueue.length)) {
+                    this.stopCurrentSpeech();
+                    this.showToast("Không tạo được giọng đọc từ máy chủ. Vui lòng bấm Đọc để thử lại.", "error");
+                    return;
+                }
+                this.sentenceIndex++;
+                playNextSentence();
+                return;
+            }
+            failedSentences = 0;
+            isCurrentAudioReady = true;
+
+            // Ngay khi câu hiện tại đã có âm thanh, tải ngầm (prefetch) câu kế tiếp nếu đã có trong hàng đợi
+            if (currentIdx + 1 < this.sentenceQueue.length) {
+                getSentenceAudioUrl(currentIdx + 1);
+            }
+
+            const audio = this.botAudioPlayer;
+            this.currentBotAudio = audio;
 
             let hasAdvanced = false;
             const advanceToNextSentence = () => {
@@ -1612,6 +2203,32 @@ class PTITChatApp {
                 hasAdvanced = true;
                 this.sentenceIndex++;
                 playNextSentence();
+            };
+
+            try {
+                audio.onended = null;
+                audio.onerror = null;
+                audio.onplaying = null;
+                audio.pause();
+            } catch (e) { }
+
+            audio.muted = false;
+            audio.volume = 1;
+            audio.src = srcUrl;
+            try {
+                audio.playbackRate = speed;
+            } catch (e) { }
+
+            audio.onplaying = () => {
+                if (this.speechSessionToken !== sessionToken) return;
+                try {
+                    audio.playbackRate = speed;
+                } catch (e) { }
+                if (!loggedStart) {
+                    loggedStart = true;
+                    console.log(`[TTS] Bắt đầu phát sau ${Math.round(performance.now() - ttsStartTime)}ms`);
+                }
+                markSpeakingActiveUI();
             };
 
             audio.onended = () => {
@@ -1623,14 +2240,49 @@ class PTITChatApp {
                 advanceToNextSentence();
             };
 
-            try {
-                await audio.play();
-            } catch (playErr) {
-                if (playErr.name === "AbortError" || this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) {
-                    return;
+            const tryPlayAudio = async (isRetry = false) => {
+                if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+                try {
+                    await audio.play();
+                    if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+                    if (!loggedStart) {
+                        loggedStart = true;
+                        console.log(`[TTS] Bắt đầu phát sau ${Math.round(performance.now() - ttsStartTime)}ms`);
+                    }
+                    markSpeakingActiveUI();
+                } catch (playErr) {
+                    if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) {
+                        return;
+                    }
+                    // Nếu Chrome báo AbortError (do chuyển trạng thái pipeline âm thanh), thử phát lại sau 150ms thay vì im lặng thoát
+                    if (!isRetry && playErr && playErr.name === "AbortError") {
+                        await new Promise(r => setTimeout(r, 150));
+                        if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+                        return await tryPlayAudio(true);
+                    }
+                    console.warn(`[TTS Play error câu ${currentIdx}]`, playErr);
+                    if (playErr && playErr.name === "NotAllowedError") {
+                        this.stopCurrentSpeech();
+                        this.showToast("Trình duyệt đang chặn tự phát âm thanh. Hãy bấm nút Đọc để nghe.", "info");
+                        return;
+                    }
+                    advanceToNextSentence();
                 }
-                console.warn("[TTS Play error]", playErr);
-                advanceToNextSentence();
+            };
+
+            await tryPlayAudio(false);
+        };
+
+        // Khi LLM vừa stream xong câu tiếp theo: tải trước (prefetch) ngay trong lúc câu hiện tại đang đọc,
+        // hoặc phát tiếp ngay nếu câu trước đã đọc xong và đang chờ
+        this.onLiveSentencesUpdated = () => {
+            if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+            if (isCurrentAudioReady && this.sentenceIndex + 1 < this.sentenceQueue.length && !this.prefetchAudios.has(this.sentenceIndex + 1)) {
+                getSentenceAudioUrl(this.sentenceIndex + 1);
+            }
+            if (this.isWaitingForMoreSentences) {
+                this.isWaitingForMoreSentences = false;
+                playNextSentence();
             }
         };
 
@@ -1912,7 +2564,7 @@ class PTITChatApp {
         const durationSec = Math.max(1, Math.round(durationMs / 1000));
 
         if (this.recognition) {
-            try { this.recognition.stop(); } catch (e) {}
+            try { this.recognition.stop(); } catch (e) { }
         }
 
         if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") {
@@ -2107,7 +2759,9 @@ class PTITChatApp {
     }
 
     async uploadFiles(files) {
-        if (this.uploadedFiles.length + files.length > 3) {
+        const uniqueNames = new Set((this.uploadedFiles || []).map(f => f.filename));
+        files.forEach(f => uniqueNames.add(f.name));
+        if (uniqueNames.size > 3) {
             this.showToast(`Mỗi phiên chỉ được tải tối đa 3 file. Hiện tại bạn đã có ${this.uploadedFiles.length} file.`, "error");
             return;
         }
@@ -2152,6 +2806,9 @@ class PTITChatApp {
             }
 
             this.uploadedFiles = data.files || [];
+            const prevPending = new Set(this.pendingAttachedFiles || []);
+            files.forEach(f => prevPending.add(f.name));
+            this.pendingAttachedFiles = Array.from(prevPending);
             this.renderUploadedFiles(this.uploadedFiles, true);
             this.setScope("hybrid");
             this.showToast(data.message || "Tải lên tài liệu thành công!", "success");
@@ -2172,8 +2829,12 @@ class PTITChatApp {
                 const data = await resp.json();
                 this.uploadedFiles = data.files || [];
                 this.renderUploadedFiles(this.uploadedFiles);
-                if (this.uploadedFiles.length > 0 && this.currentScope === "ptit_only") {
-                    this.setScope("hybrid");
+                if (this.uploadedFiles.length > 0) {
+                    if (this.currentScope === "ptit_only") {
+                        this.setScope("hybrid");
+                    }
+                } else {
+                    this.setScope("ptit_only");
                 }
             }
         } catch (e) {
@@ -2333,6 +2994,7 @@ class PTITChatApp {
             });
             if (resp.ok) {
                 this.uploadedFiles = [];
+                this.pendingAttachedFiles = [];
                 this.renderUploadedFiles([], false);
                 this.renderSidePanelDocsList();
                 this.setScope("ptit_only");
@@ -2356,6 +3018,9 @@ class PTITChatApp {
             if (resp.ok) {
                 const data = await resp.json();
                 this.uploadedFiles = data.files || [];
+                if (this.pendingAttachedFiles) {
+                    this.pendingAttachedFiles = this.pendingAttachedFiles.filter(fn => fn !== filename);
+                }
                 this.renderUploadedFiles(this.uploadedFiles, false);
                 this.renderSidePanelDocsList();
                 if (this.uploadedFiles.length === 0) {

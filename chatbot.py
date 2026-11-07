@@ -51,13 +51,14 @@ client = get_genai_client() if API_KEY else None
 
 # Danh sách model Vision & Chat ưu tiên (các model nhanh, ổn định đưa lên đầu, loại bỏ model gây chậm/treo)
 VISION_MODELS = [
-    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash-lite",
     "gemini-flash-lite-latest",
-    "gemini-3.8-flash",
-    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-flash-latest",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
     "gemini-3.1-flash-lite-preview",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash"
+    "gemini-3-flash-preview"
 ]
 
 
@@ -655,7 +656,7 @@ def ask_chatbot(question, n_results=4):
         context_parts.append(f"--- [TÀI LIỆU {i}: {d['source']} (Trang {d['page']})] ---\n{d['content']}")
     context_str = "\n\n".join(context_parts)
 
-    prompt = f"""
+    prompt = fr"""
 Bạn là Trợ lý Ảo Thông Minh của Học viện Công nghệ Bưu chính Viễn thông (PTIT).
 Dưới đây là thông tin trích xuất từ tài liệu chính thức của Học viện:
 

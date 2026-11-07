@@ -3,9 +3,16 @@ import io
 import re
 import time
 import requests
+from requests.adapters import HTTPAdapter
 import pymupdf
 import docx
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# Tái sử dụng kết nối HTTP Keep-Alive giúp giảm 150-300ms bắt tay SSL mỗi lần gọi API
+_HTTP_SESSION = requests.Session()
+_adapter = HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=1)
+_HTTP_SESSION.mount("https://", _adapter)
+_HTTP_SESSION.mount("http://", _adapter)
 
 # Cấu hình giới hạn tài liệu tải lên
 MAX_FILE_SIZE_MB = 5
@@ -210,7 +217,7 @@ def batch_get_embeddings(texts, api_key, batch_size=50, timeout=20.0):
         headers = {"Content-Type": "application/json"}
 
         try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
+            resp = _HTTP_SESSION.post(url, json=payload, headers=headers, timeout=timeout)
             if resp.status_code == 200:
                 data = resp.json()
                 embeddings_data = data.get("embeddings", [])
@@ -239,7 +246,7 @@ def _get_single_embedding(text, api_key, timeout=5.0):
     payload = {"content": {"parts": [{"text": text}]}}
     headers = {"Content-Type": "application/json"}
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
+        resp = _HTTP_SESSION.post(url, json=payload, headers=headers, timeout=timeout)
         if resp.status_code == 200:
             data = resp.json()
             return data.get("embedding", {}).get("values")

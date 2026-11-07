@@ -44,3 +44,4 @@ user_uploads/
 static/voice_uploads/
 static/audio_cache/
 *.mp3
+local/
