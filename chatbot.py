@@ -51,13 +51,14 @@ client = get_genai_client() if API_KEY else None
 
 # Danh sách model Vision & Chat ưu tiên (các model nhanh, ổn định đưa lên đầu, loại bỏ model gây chậm/treo)
 VISION_MODELS = [
-    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash-lite",
     "gemini-flash-lite-latest",
-    "gemini-3.8-flash",
-    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-flash-latest",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
     "gemini-3.1-flash-lite-preview",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash"
+    "gemini-3-flash-preview"
 ]
 
 
@@ -639,9 +640,8 @@ def ask_chatbot(question, n_results=4):
     print(f"\n[?] Câu hỏi: {question}")
 
     try:
-        from app import safe_query_knowledge_base, expand_context_for_tables
-        docs = safe_query_knowledge_base(question, n_results=n_results)
-        docs = expand_context_for_tables(question, docs)
+        from app import smart_query_knowledge_base
+        docs = smart_query_knowledge_base(question, n_results=n_results)
     except Exception:
         docs = query_knowledge_base(question, n_results=n_results)
 
@@ -649,13 +649,19 @@ def ask_chatbot(question, n_results=4):
         print("[!] Không tìm thấy thông tin phù hợp trong cơ sở tri thức.")
         return ""
 
-    # Ghép ngữ cảnh từ các đoạn tìm được
+    # Ghép ngữ cảnh từ các đoạn tìm được kèm tên file .pdf và tên văn bản
     context_parts = []
     for i, d in enumerate(docs, start=1):
-        context_parts.append(f"--- [TÀI LIỆU {i}: {d['source']} (Trang {d['page']})] ---\n{d['content']}")
+        try:
+            from app import resolve_doc_display_info
+            info = resolve_doc_display_info(d.get("source"), is_user_doc=False)
+            src_label = f"File: {info['file']} ({info['title']})"
+        except Exception:
+            src_label = f"File: {str(d.get('source', '')).replace('.md', '.pdf')}"
+        context_parts.append(f"--- [TÀI LIỆU {i} | {src_label} | Trang {d['page']}] ---\n{d['content']}")
     context_str = "\n\n".join(context_parts)
 
-    prompt = f"""
+    prompt = fr"""
 Bạn là Trợ lý Ảo Thông Minh của Học viện Công nghệ Bưu chính Viễn thông (PTIT).
 Dưới đây là thông tin trích xuất từ tài liệu chính thức của Học viện:
 
@@ -693,8 +699,13 @@ CÁC NGUYÊN TẮC BẮT BUỘC KHI TRẢ LỜI:
    - Nếu trong bảng có dấu gạch ngang (-) cho một mức học bổng (ví dụ mức Khá), nêu rõ cơ sở đó không xét / không có mức điểm chuẩn cho loại học bổng này.
    - Nêu rõ số tiền học bổng tương ứng từng loại (Xuất sắc, Giỏi, Khá) bằng đơn vị VNĐ (Ví dụ: 17.480 nghìn đồng = 17.480.000 đ, 19.228 nghìn đồng = 19.228.000 đ, 20.976 nghìn đồng = 20.976.000 đ).
 
-5. TUYỆT ĐỐI KHÔNG TRÍCH DẪN NGUỒN TÊN FILE TRONG VĂN BẢN:
-   - KHÔNG nhắc đến tên file nội bộ (hp_2025.md, mon_hoc.md, ct_cntt.md, HB_HK1_25-26.md...), KHÔNG nhắc số trang tài liệu, KHÔNG tạo mục "Nguồn tài liệu tham khảo".
+5. TRÍCH DẪN NGUỒN TÀI LIỆU Ở CUỐI CÂU TRẢ LỜI (BẮT BUỘC):
+   - Ở cuối câu trả lời, BẮT BUỘC phải có mục trích dẫn nguồn tài liệu theo đúng Mẫu 1:
+   📌 **Nguồn trích dẫn:**
+   - 📄 Trang <số_trang> - File: <tên_file_pdf> (<Tên văn bản>)
+   - Ví dụ:
+   📌 **Nguồn trích dẫn:**
+   - 📄 Trang 3 - File: hp_2025.pdf (Quyết định 1120/QĐ-HV Mức thu học phí năm học 2025-2026)
 
 6. ĐỊNH DẠNG VĂN BẢN VÀ KÝ HIỆU TOÁN HỌC (RẤT QUAN TRỌNG):
    - TUYỆT ĐỐI KHÔNG sử dụng ký hiệu LaTeX toán học như $\ge$, $\le$, $\times$ hay bao bọc bởi dấu $.
@@ -712,8 +723,9 @@ CÁC NGUYÊN TẮC BẮT BUỘC KHI TRẢ LỜI:
         answer, err = call_gemini_text_rest(prompt, m_name, API_KEY, timeout=10)
         if answer:
             try:
-                from app import clean_llm_response
+                from app import clean_llm_response, ensure_answer_citations
                 answer = clean_llm_response(answer)
+                answer, _ = ensure_answer_citations(answer, ptit_docs=docs, effective_scope="ptit_only")
             except Exception:
                 pass
             print(f"\n[Chatbot Trả lời]:\n{answer}\n")
@@ -721,9 +733,10 @@ CÁC NGUYÊN TẮC BẮT BUỘC KHI TRẢ LỜI:
 
     # Fallback nếu LLM bận hoặc hết quota
     try:
-        from app import synthesize_targeted_answer
-        fallback_ans = synthesize_targeted_answer(question, docs)
+        from app import safe_fallback_answer, ensure_answer_citations
+        fallback_ans = safe_fallback_answer(question, docs)
         if fallback_ans:
+            fallback_ans, _ = ensure_answer_citations(fallback_ans, ptit_docs=docs, effective_scope="ptit_only")
             print(f"\n[Chatbot Trả lời (Fallback)]:\n{fallback_ans}\n")
             return fallback_ans
     except Exception:

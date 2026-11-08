@@ -1,0 +1,581 @@
+﻿<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTIT Smart Assistant - Trá»£ LÃ½ áº¢o ThÃ´ng Minh PTIT</title>
+    <meta name="description"
+        content="Há»‡ thá»‘ng Trá»£ lÃ½ áº£o AI há»i Ä‘Ã¡p thÃ´ng tin há»c phÃ­, quy cháº¿ Ä‘Ã o táº¡o vÃ  chÆ°Æ¡ng trÃ¬nh há»c ngÃ nh CÃ´ng nghá»‡ ThÃ´ng tin Há»c viá»‡n CÃ´ng nghá»‡ BÆ°u chÃ­nh Viá»…n thÃ´ng.">
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23C41E3A'/><text x='50%' y='62%' font-size='50' font-weight='900' fill='white' text-anchor='middle' font-family='sans-serif'>P</text></svg>">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+
+    <!-- Font Awesome / Iconify / CDN libraries -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Markdown & Highlight.js for beautiful markdown & table rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css?v=19">
+</head>
+
+<body>
+    <div class="app-layout">
+        <!-- SIDEBAR -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <div class="brand-badge">PTIT</div>
+                    <div class="brand-info">
+                        <span class="brand-title">ChatBot</span>
+
+                    </div>
+                </div>
+                <button class="icon-btn mobile-close-btn" id="closeSidebarBtn" title="ÄÃ³ng menu">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="sidebar-action">
+                <button class="new-chat-btn" id="newChatBtn">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Cuá»™c trÃ² chuyá»‡n má»›i</span>
+                </button>
+            </div>
+
+            <!-- CHAT HISTORY -->
+            <div class="sidebar-section">
+                <div class="section-title">
+                    <span>Lá»‹ch sá»­ trÃ² chuyá»‡n</span>
+                    <button class="section-action" id="clearAllHistoryBtn" title="XÃ³a toÃ n bá»™ lá»‹ch sá»­">
+                        <i class="fa-regular fa-trash-can"></i>
+                    </button>
+                </div>
+                <div class="chat-history-list" id="chatHistoryList">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- KNOWLEDGE BASE STATS -->
+            <div class="sidebar-section kb-stats-section" style="display: none;">
+                <div class="section-title">
+                    <span>CÆ¡ sá»Ÿ tri thá»©c (RAG)</span>
+                    <span class="badge-live" id="kbStatusBadge"><span class="pulse-dot"></span> Sáºµn sÃ ng</span>
+                </div>
+                <div class="kb-cards">
+                    <div class="kb-stat-card" id="openKbModalBtn" title="Xem chi tiáº¿t cÃ¡c tÃ i liá»‡u Ä‘Ã£ láº­p chá»‰ má»¥c">
+                        <div class="kb-stat-icon"><i class="fa-solid fa-database"></i></div>
+                        <div class="kb-stat-text">
+                            <span class="kb-count" id="totalChunksDisplay">348 Chunks</span>
+                            <span class="kb-label">Vector ChromaDB</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right kb-arrow"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SIDEBAR FOOTER -->
+            <div class="sidebar-footer">
+                <button class="footer-btn" id="openSettingsBtn" title="CÃ i Ä‘áº·t há»‡ thá»‘ng & API Key">
+                    <i class="fa-solid fa-gear"></i>
+                    <span>CÃ i Ä‘áº·t</span>
+                </button>
+                <div class="footer-divider"></div>
+                <button class="footer-btn" id="themeToggleBtn" title="Chuyá»ƒn cháº¿ Ä‘á»™ SÃ¡ng / Tá»‘i">
+                    <i class="fa-solid fa-moon" id="themeIcon"></i>
+                    <span id="themeText">Giao diá»‡n Tá»‘i</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN CHAT CONTAINER -->
+        <main class="chat-container">
+            <!-- FLOATING TOP ACTIONS (Tá»‘i giáº£n, khÃ´ng chiáº¿m diá»‡n tÃ­ch Header) -->
+            <div class="chat-floating-actions" id="chatFloatingActions">
+                <button class="floating-btn mobile-menu-btn" id="openSidebarBtn" title="Má»Ÿ danh má»¥c">
+                    <i class="fa-solid fa-bars-staggered"></i>
+                </button>
+                <span id="currentChatTitle" class="sr-only">Trá»£ lÃ½ Há»i Ä‘Ã¡p Há»c viá»‡n PTIT</span>
+                <span id="modelBadgeDisplay" class="sr-only"></span>
+                <div class="floating-right-group">
+                    <button class="floating-action-pill" id="openUploadedDocsModalBtn"
+                        title="Xem danh sÃ¡ch tÃ i liá»‡u Ä‘Ã£ táº£i lÃªn trong phiÃªn">
+                        <i class="fa-solid fa-folder-open"></i>
+                        <span id="navDocsCountText">TÃ i liá»‡u (0)</span>
+                    </button>
+                    <button class="floating-action-btn" id="exportChatBtn" title="Xuáº¥t ná»™i dung trÃ² chuyá»‡n (Markdown)">
+                        <i class="fa-solid fa-download"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- CHAT SCROLL AREA -->
+            <div class="chat-messages-area" id="chatMessagesArea">
+                <!-- HERO WELCOME (Shown when chat is empty) -->
+                <div class="welcome-hero" id="welcomeHero">
+                    <div class="hero-avatar">
+                        <div class="avatar-glow"></div>
+                        <div class="ptit-logo-circle">
+                            <span class="ptit-monogram">PTIT</span>
+                        </div>
+                    </div>
+                    <h2 class="hero-title">Xin chÃ o! TÃ´i cÃ³ thá»ƒ giÃºp gÃ¬ cho báº¡n?</h2>
+                    <p class="hero-desc">
+                        Há»‡ thá»‘ng Trá»£ lÃ½ AI há»— trá»£ giáº£i Ä‘Ã¡p thÃ´ng tin há»c phÃ­, quy cháº¿ Ä‘Ã o táº¡o, chÆ°Æ¡ng trÃ¬nh há»c vÃ  máº«u
+                        Ä‘Æ¡n biá»ƒu sinh viÃªn Há»c viá»‡n PTIT.
+                    </p>
+
+                    <!-- QUICK FILTER PILLS -->
+                    <div class="prompt-category-tabs">
+                        <button class="cat-pill active" data-cat="all"><i class="fa-solid fa-sparkles"></i> Phá»•
+                            biáº¿n</button>
+                        <button class="cat-pill" data-cat="tuition"><i class="fa-solid fa-coins"></i> Há»c phÃ­</button>
+                        <button class="cat-pill" data-cat="curriculum"><i class="fa-solid fa-graduation-cap"></i> NgÃ nh
+                            CNTT</button>
+                        <button class="cat-pill" data-cat="rules"><i class="fa-solid fa-book-bookmark"></i> Quy cháº¿ &
+                            Há»c bá»•ng</button>
+                    </div>
+
+                    <!-- SUGGESTION CARDS -->
+                    <div class="suggestions-grid" id="suggestionsGrid">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- MESSAGE THREAD -->
+                <div class="message-thread" id="messageThread">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- TYPING INDICATOR -->
+                <div class="typing-indicator-box hidden" id="typingIndicator">
+                    <div class="bot-avatar-sm">
+                        <span>P</span>
+                    </div>
+                    <div class="typing-bubble">
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                        <span class="typing-label" id="typingLabel">Äang tra cá»©u Vector DB & táº¡o cÃ¢u tráº£ lá»i...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CHAT INPUT CONTAINER (Phong cÃ¡ch Antigravity / Claude) -->
+            <div class="chat-input-wrapper" id="chatInputWrapper">
+                <!-- UPLOADED FILES BAR (Tráº¡ng thÃ¡i tÃ i liá»‡u táº£i lÃªn - chá»‰ hiá»‡n khi cÃ³ file) -->
+                <div class="uploaded-files-bar" id="uploadedFilesBar" style="display: none;">
+                    <div class="uploaded-files-list" id="uploadedFilesList"></div>
+                    <div class="upload-status-indicator" id="uploadStatusIndicator" style="display: none;">
+                        <span class="spinner-sm"></span>
+                        <span id="uploadStatusText">Äang xá»­ lÃ½ tÃ i liá»‡u...</span>
+                    </div>
+                    <button type="button" class="bar-manage-btn" id="openDocsModalFromBarBtn"
+                        title="Xem chi tiáº¿t tÃ i liá»‡u Ä‘Ã£ táº£i lÃªn">
+                        <i class="fa-solid fa-up-right-from-square"></i> Chi tiáº¿t
+                    </button>
+                </div>
+
+                <!-- FORM NHáº¬P CHAT (Antigravity / Claude Box Card) -->
+                <form class="chat-box-card" id="chatForm">
+                    <!-- HÃ€NG TRÃŠN: Ã” GÃ• VÄ‚N Báº¢N + NÃšT ENTER â†µ -->
+                    <div class="chat-box-top">
+                        <textarea id="userInput" rows="1"
+                            placeholder="Nháº­p cÃ¢u há»i vá» há»c phÃ­, mÃ´n há»c, quy cháº¿ PTIT..." autocomplete="off"
+                            required></textarea>
+                        <button type="submit" class="box-submit-btn" id="sendBtn" title="Gá»­i cÃ¢u há»i (Enter)">
+                            <i class="fa-solid fa-arrow-turn-down box-enter-icon"></i>
+                        </button>
+                    </div>
+
+                    <!-- HÃ€NG DÆ¯á»šI: THANH CÃ”NG Cá»¤ DÆ¯á»šI Ã” NHáº¬P -->
+                    <div class="chat-box-bottom">
+                        <!-- Cá»¥m trÃ¡i: NÃºt Ghim (ÄÃ­nh kÃ¨m) & NÃºt (ðŸŽ™) Ghi Ã¢m -->
+                        <div class="box-bottom-left">
+                            <input type="file" id="fileUploadInput" multiple accept=".pdf,.docx,.txt,.md"
+                                style="display: none;">
+                            <button type="button" class="box-tool-btn" id="uploadFileBtn"
+                                title="Táº£i tÃ i liá»‡u lÃªn (.pdf, .docx, .txt, .md - Tá»‘i Ä‘a 3 file, 5MB/file)">
+                                <i class="fa-solid fa-paperclip"></i>
+                            </button>
+                            <button type="button" class="box-tool-btn" id="voiceInputBtn"
+                                title="Nháº­p cÃ¢u há»i báº±ng giá»ng nÃ³i (Speech-to-Text)">
+                                <i class="fa-solid fa-microphone"></i>
+                            </button>
+                        </div>
+
+                        <!-- Cá»¥m giá»¯a: DÃ²ng lÆ°u Ã½ AI nhá» gá»n -->
+                        <div class="box-bottom-center">
+                            <span>PTIT AI cÃ³ thá»ƒ nháº§m láº«n. HÃ£y Ä‘á»‘i chiáº¿u thÃ´ng tin chÃ­nh thá»©c.</span>
+                        </div>
+
+                        <!-- Cá»¥m pháº£i: Bá»™ chá»n MÃ´ hÃ¬nh & Pháº¡m vi tra cá»©u -->
+                        <div class="box-bottom-right">
+                            <!-- THANH CHá»ŒN MÃ” HÃŒNH THU Gá»ŒN -->
+                            <div class="model-selector-wrapper" id="modelSelectorWrapper">
+                                <button type="button" class="model-selector-btn" id="modelSelectorBtn"
+                                    title="Chá»n mÃ´ hÃ¬nh AI (LLM)" aria-haspopup="true" aria-expanded="false">
+                                    <span class="model-btn-label" id="modelBtnLabel">2.5 Flash-Lite</span>
+                                    <i class="fa-solid fa-chevron-down model-btn-arrow"></i>
+                                </button>
+
+                                <!-- THáºº POP-UP CHá»ŒN MÃ” HÃŒNH KHá»šP BACKEND -->
+                                <div class="model-popup-card" id="modelPopupCard" role="menu">
+                                    <div class="model-popup-header">
+                                        <span class="model-popup-header-title">
+                                            <i class="fa-solid fa-microchip"></i> Chá»n MÃ´ HÃ¬nh AI
+                                        </span>
+                                        <span class="model-popup-header-badge">PTIT RAG</span>
+                                    </div>
+                                    <div class="model-popup-list">
+                                        <div class="model-popup-item selected" data-model="gemini-2.5-flash-lite"
+                                            role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">2.5 Flash-Lite</span>
+                                                <span class="model-badge-tag badge-recommended">KhuyÃªn dÃ¹ng â€¢ SiÃªu tá»‘c
+                                                    &amp; á»”n
+                                                    Ä‘á»‹nh</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-flash-lite-latest"
+                                            role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">Flash-Lite Latest</span>
+                                                <span class="model-badge-tag badge-fast">Nhanh â€¢ Báº£n Lite má»›i
+                                                    nháº¥t</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-2.5-flash" role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">2.5 Flash</span>
+                                                <span class="model-badge-tag badge-balanced">CÃ¢n báº±ng cháº¥t lÆ°á»£ng &amp;
+                                                    tá»‘c
+                                                    Ä‘á»™</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-flash-latest" role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">Flash Latest</span>
+                                                <span class="model-badge-tag badge-fast">Báº£n Flash tiÃªu chuáº©n má»›i
+                                                    nháº¥t</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-3-flash-preview"
+                                            role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">3.0 Flash Preview</span>
+                                                <span class="model-badge-tag badge-preview">ThÃ´ng minh tháº¿ há»‡ 3.0</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-3.1-flash-lite-preview"
+                                            role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">3.1 Flash-Lite Preview</span>
+                                                <span class="model-badge-tag badge-preview">Báº£n xem trÆ°á»›c nÃ¢ng
+                                                    cao</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-2.0-flash" role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">2.0 Flash</span>
+                                                <span class="model-badge-tag badge-quality">á»”n Ä‘á»‹nh â€¢ Äá»™ tin cáº­y
+                                                    cao</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                        <div class="model-popup-item" data-model="gemini-2.0-flash-lite"
+                                            role="menuitem">
+                                            <div class="model-popup-item-info">
+                                                <span class="model-popup-item-name">2.0 Flash-Lite</span>
+                                                <span class="model-badge-tag badge-pro">Nhanh &amp; Tiáº¿t kiá»‡m
+                                                    Quota</span>
+                                            </div>
+                                            <i class="fa-solid fa-check model-popup-item-check"></i>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Native select giá»¯ nguyÃªn Ä‘á»“ng bá»™ trong DOM -->
+                                <select id="quickModelSelect" class="sr-only" tabindex="-1" aria-hidden="true"
+                                    style="position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px;">
+                                    <option value="gemini-2.5-flash-lite" selected>2.5 Flash-Lite (KhuyÃªn dÃ¹ng)</option>
+                                    <option value="gemini-flash-lite-latest">Flash-Lite Latest (Nhanh)</option>
+                                    <option value="gemini-2.5-flash">2.5 Flash (CÃ¢n báº±ng)</option>
+                                    <option value="gemini-flash-latest">Flash Latest (TiÃªu chuáº©n)</option>
+                                    <option value="gemini-3-flash-preview">3.0 Flash Preview</option>
+                                    <option value="gemini-3.1-flash-lite-preview">3.1 Flash-Lite Preview</option>
+                                    <option value="gemini-2.0-flash">2.0 Flash (á»”n Ä‘á»‹nh)</option>
+                                    <option value="gemini-2.0-flash-lite">2.0 Flash-Lite (Tiáº¿t kiá»‡m)</option>
+                                </select>
+                            </div>
+
+                            <!-- Bá»˜ CHá»ŒN PHáº M VI (SCOPE SWITCHER) -->
+                            <div class="scope-selector-wrapper" id="scopeSelectorWrapper">
+                                <button type="button" class="scope-selector-btn" id="scopeSelectorBtn"
+                                    title="Chá»n pháº¡m vi tra cá»©u (Scope Switcher)" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    <span class="scope-btn-label" id="scopeBtnLabel">Chá»‰ PTIT</span>
+                                    <i class="fa-solid fa-chevron-down scope-btn-arrow"></i>
+                                </button>
+
+                                <div class="scope-popup-card" id="scopePopupCard" role="menu">
+                                    <div class="scope-popup-header">
+                                        <span class="scope-popup-header-title">
+                                            <i class="fa-solid fa-sliders"></i> Pháº¡m Vi Tra Cá»©u
+                                        </span>
+                                        <span class="scope-popup-header-badge" id="scopeDocsCountBadge">0 file</span>
+                                    </div>
+                                    <div class="scope-popup-list">
+                                        <div class="scope-popup-item" data-scope="hybrid" role="menuitem">
+                                            <div class="scope-popup-item-info">
+                                                <span class="scope-popup-item-name"><i
+                                                        class="fa-solid fa-arrows-split-up-and-left"></i> Káº¿t há»£p
+                                                    (Hybrid)</span>
+                                                <span class="scope-badge-tag badge-recommended">KhuyÃªn dÃ¹ng â€¢ Äá»‘i chiáº¿u
+                                                    tÃ i liá»‡u
+                                                    &amp; PTIT</span>
+                                            </div>
+                                            <i class="fa-solid fa-check scope-popup-item-check"></i>
+                                        </div>
+                                        <div class="scope-popup-item" data-scope="user_only" role="menuitem">
+                                            <div class="scope-popup-item-info">
+                                                <span class="scope-popup-item-name"><i
+                                                        class="fa-solid fa-file-lines"></i> Chá»‰
+                                                    tÃ i liá»‡u táº£i lÃªn</span>
+                                                <span class="scope-badge-tag badge-fast">Chá»‰ tÃ¬m trong cÃ¡c file báº¡n Ä‘Ã£
+                                                    táº£i
+                                                    lÃªn</span>
+                                            </div>
+                                            <i class="fa-solid fa-check scope-popup-item-check"></i>
+                                        </div>
+                                        <div class="scope-popup-item selected" data-scope="ptit_only" role="menuitem">
+                                            <div class="scope-popup-item-info">
+                                                <span class="scope-popup-item-name"><i
+                                                        class="fa-solid fa-building-columns"></i>
+                                                    Chá»‰ CÆ¡ sá»Ÿ tri thá»©c PTIT</span>
+                                                <span class="scope-badge-tag badge-balanced">Há»c phÃ­, quy cháº¿, CTÄT Há»c
+                                                    viá»‡n</span>
+                                            </div>
+                                            <i class="fa-solid fa-check scope-popup-item-check"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+
+
+    <!-- MODAL: SETTINGS & API KEY -->
+    <div class="modal-backdrop" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="modal-icon"><i class="fa-solid fa-sliders"></i></div>
+                    <div>
+                        <h3 class="modal-title">CÃ i Äáº·t RAG & TrÃ­ Tuá»‡ NhÃ¢n Táº¡o</h3>
+                        <p class="modal-subtitle">TÃ¹y biáº¿n mÃ´ hÃ¬nh Gemini vÃ  thÃ´ng sá»‘ tÃ¬m kiáº¿m ngá»¯ nghÄ©a</p>
+                    </div>
+                </div>
+                <button class="icon-btn" id="closeSettingsModalBtn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="customApiKeyInput">
+                        <span>Gemini API Key CÃ¡ NhÃ¢n (TÃ¹y chá»n)</span>
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="field-link">Láº¥y API Key
+                            miá»…n phÃ­ <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                    </label>
+                    <input type="password" id="customApiKeyInput" class="form-control"
+                        placeholder="DÃ¡n API Key (bá» trá»‘ng Ä‘á»ƒ dÃ¹ng máº·c Ä‘á»‹nh há»‡ thá»‘ng)...">
+                    <small class="form-hint">Náº¿u API máº·c Ä‘á»‹nh bá»‹ quÃ¡ táº£i vÃ o giá» cao Ä‘iá»ƒm, nháº­p API Key cá»§a báº¡n Ä‘á»ƒ trÃ²
+                        chuyá»‡n mÆ°á»£t mÃ  khÃ´ng giá»›i háº¡n.</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="modelSelect">MÃ´ hÃ¬nh AI Æ¯u tiÃªn (LLM)</label>
+                    <select id="modelSelect" class="form-control">
+                        <option value="gemini-2.5-flash-lite" selected>gemini-2.5-flash-lite (KhuyÃªn dÃ¹ng - SiÃªu tá»‘c
+                            &amp; á»”n Ä‘á»‹nh nháº¥t)</option>
+                        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (Báº£n Flash-Lite má»›i nháº¥t)
+                        </option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (CÃ¢n báº±ng cháº¥t lÆ°á»£ng &amp; tá»‘c Ä‘á»™)</option>
+                        <option value="gemini-flash-latest">gemini-flash-latest (Báº£n Flash tiÃªu chuáº©n má»›i nháº¥t)</option>
+                        <option value="gemini-3-flash-preview">gemini-3-flash-preview (Báº£n Flash 3.0 Preview)</option>
+                        <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview (Báº£n xem trÆ°á»›c tá»‘c
+                            Ä‘á»™ cao)</option>
+                        <option value="gemini-2.0-flash">gemini-2.0-flash (á»”n Ä‘á»‹nh cao)</option>
+                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Nhanh &amp; Tiáº¿t kiá»‡m Quota)
+                        </option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <div class="range-header">
+                        <label class="form-label" for="topKInput">Sá»‘ lÆ°á»£ng Ä‘oáº¡n tÃ i liá»‡u Ä‘á»‘i chiáº¿u (Top-K
+                            Chunks):</label>
+                        <span class="range-val" id="topKValue">4</span>
+                    </div>
+                    <input type="range" id="topKInput" min="2" max="8" value="4" class="form-range">
+                    <div class="range-labels">
+                        <span>2 (Nhanh gá»n)</span>
+                        <span>4 (Tá»‘i Æ°u)</span>
+                        <span>8 (Äáº§y Ä‘á»§ nháº¥t)</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="voiceSelect">Giá»ng Ä‘á»c Trá»£ lÃ½</label>
+                    <select id="voiceSelect" class="form-select">
+                        <option value="female" selected>Giá»ng Ná»¯</option>
+                        <option value="male">Giá»ng Nam</option>
+                    </select>
+                    <div class="voice-current-status" id="voiceCurrentStatusBox">
+                        <i class="fa-solid fa-microphone-lines"></i>
+                        <span>Äang dÃ¹ng giá»ng: <strong id="currentVoiceNameDisplay">Äang kiá»ƒm tra trÃ¬nh
+                                duyá»‡t...</strong></span>
+                    </div>
+                    <small class="form-help">Æ¯u tiÃªn giá»ng tiáº¿ng Viá»‡t cÃ³ sáºµn trÃªn trÃ¬nh duyá»‡t/Windows. Náº¿u trÃ¬nh duyá»‡t
+                        chÆ°a cÃ³ giá»ng phÃ¹ há»£p, há»‡ thá»‘ng sáº½ táº¡o giá»ng qua mÃ¡y chá»§.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="voiceSpeedSelect">Tá»‘c Ä‘á»™ Ä‘á»c giá»ng nÃ³i</label>
+                    <select id="voiceSpeedSelect" class="form-select">
+                        <option value="0.8">0.8x (Cháº­m rÃ£i)</option>
+                        <option value="1.0" selected>1.0x (TiÃªu chuáº©n)</option>
+                        <option value="1.2">1.2x (HÆ¡i nhanh)</option>
+                        <option value="1.5">1.5x (Nhanh)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="autoVoiceToggle">
+                        <span>Tá»± Ä‘á»™ng Ä‘á»c to cÃ¢u tráº£ lá»i cá»§a trá»£ lÃ½ báº±ng giá»ng nÃ³i</span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="showLatencyToggle">
+                        <span>Hiá»ƒn thá»‹ thÃ´ng sá»‘ thá»i gian pháº£n há»“i (Latency / TTFT)</span>
+                    </label>
+                    <small class="form-hint" style="margin-left: 24px; display: block; margin-top: 4px;">Máº·c Ä‘á»‹nh táº¯t.
+                        Khi báº­t, há»‡ thá»‘ng sáº½ hiá»ƒn thá»‹ thá»i gian cÃ³ chá»¯ Ä‘áº§u tiÃªn (TTFT) vÃ  tá»•ng thá»i gian tráº£ lá»i á»Ÿ gÃ³c
+                        cÃ¢u tráº£ lá»i.</small>
+                </div>
+
+                <div class="form-group" id="benchmarkStatsGroup">
+                    <label class="form-label">Thá»‘ng kÃª tá»‘c Ä‘á»™ láº§n gáº§n nháº¥t</label>
+                    <div
+                        style="background: var(--bg-secondary, rgba(255,255,255,0.04)); border: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: 8px; padding: 10px 14px; font-size: 0.85rem; line-height: 1.6;">
+                        <div>â±ï¸ <strong>Thá»i gian chá»¯ Ä‘áº§u tiÃªn (TTFT):</strong> <span id="statTtftDisplay"
+                                style="color: var(--primary, #3b82f6); font-weight: 600;">ChÆ°a cÃ³ dá»¯ liá»‡u</span></div>
+                        <div>âš¡ <strong>Tá»•ng thá»i gian hoÃ n thÃ nh:</strong> <span id="statTotalDisplay"
+                                style="color: #10b981; font-weight: 600;">ChÆ°a cÃ³ dá»¯ liá»‡u</span></div>
+                        <div>ðŸ¤– <strong>MÃ´ hÃ¬nh phá»¥c vá»¥:</strong> <span id="statModelDisplay"
+                                style="color: var(--text-muted, #94a3b8);">â€”</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="resetSettingsBtn">Äáº·t láº¡i máº·c Ä‘á»‹nh</button>
+                <button class="btn btn-primary" id="saveSettingsBtn">LÆ°u CÃ i Äáº·t</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: SOURCE DETAIL VIEWER -->
+    <div class="modal-backdrop" id="sourceModal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="modal-icon"><i class="fa-solid fa-file-lines"></i></div>
+                    <div>
+                        <h3 class="modal-title" id="sourceModalTitle">Chi Tiáº¿t Äoáº¡n TrÃ­ch Dáº«n Gá»‘c</h3>
+                        <p class="modal-subtitle" id="sourceModalSubtitle">Äá»‘i chiáº¿u ná»™i dung trong cÆ¡ sá»Ÿ tri thá»©c PTIT
+                        </p>
+                    </div>
+                </div>
+                <button class="icon-btn" id="closeSourceModalBtn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="source-inspect-box">
+                    <pre><code id="sourceModalContent"></code></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="copySourceContentBtn"><i class="fa-regular fa-copy"></i> Sao chÃ©p
+                    trÃ­ch dáº«n</button>
+                <button class="btn btn-primary" id="closeSourceModalFooterBtn">ÄÃ³ng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SIDE PANEL: UPLOADED DOCUMENTS DRAWER -->
+    <div class="docs-side-panel-backdrop" id="docsSidePanelBackdrop"></div>
+    <aside class="docs-side-panel" id="docsSidePanel" aria-label="Quáº£n lÃ½ tÃ i liá»‡u Ä‘Ã£ táº£i lÃªn">
+        <div class="docs-side-panel-header">
+            <div class="docs-side-panel-title-group">
+                <div class="docs-side-panel-icon"><i class="fa-solid fa-folder-open"></i></div>
+                <div>
+                    <h3 class="docs-side-panel-title">TÃ i Liá»‡u ÄÃ£ Náº¡p</h3>
+                    <span class="docs-side-panel-badge" id="sidePanelDocsCountBadge">0/3 file</span>
+                </div>
+            </div>
+            <button class="icon-btn" id="closeDocsSidePanelBtn" title="ÄÃ³ng báº£ng tÃ i liá»‡u">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="docs-side-panel-body">
+            <div class="docs-side-panel-upload-box">
+                <button type="button" class="btn btn-primary btn-sm side-panel-upload-btn" id="sidePanelUploadBtn">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Táº£i thÃªm tÃ i liá»‡u
+                </button>
+                <p class="docs-side-panel-hint">
+                    Há»— trá»£: <strong>.pdf, .docx, .txt, .md</strong> (Tá»‘i Ä‘a 3 file, 5MB, 25 trang/file).
+                </p>
+            </div>
+            <div class="docs-side-panel-list" id="sidePanelDocsList">
+                <!-- Populated dynamically by JS -->
+            </div>
+        </div>
+        <div class="docs-side-panel-footer">
+            <button class="btn btn-danger-subtle btn-sm" id="sidePanelClearAllBtn">
+                <i class="fa-regular fa-trash-can"></i> XÃ³a táº¥t cáº£
+            </button>
+            <button class="btn btn-secondary btn-sm" id="closeDocsSidePanelFooterBtn">ÄÃ³ng</button>
+        </div>
+    </aside>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- APP JAVASCRIPT -->
+    <script src="/static/js/app.js?v=21"></script>
+</body>
+
+</html>
