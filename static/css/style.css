@@ -908,6 +908,7 @@ body {
     display: flex;
     flex-direction: column;
     max-width: calc(100% - 54px);
+    min-width: 0;
 }
 
 .user-message .msg-bubble-wrapper {
@@ -917,6 +918,7 @@ body {
 .bot-message .msg-bubble-wrapper {
     align-items: flex-start;
     width: 100%;
+    min-width: 0;
 }
 
 .msg-bubble {
@@ -924,6 +926,7 @@ body {
     border-radius: var(--radius-lg);
     position: relative;
     word-break: break-word;
+    max-width: 100%;
 }
 
 .user-message .msg-bubble {
@@ -941,6 +944,9 @@ body {
     border-bottom-left-radius: 4px;
     box-shadow: var(--shadow-sm);
     line-height: 1.7;
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
 }
 
 /* Bot Markdown Elements */
@@ -1011,11 +1017,12 @@ body {
     color: #c9d1d9;
 }
 
-/* MARKDOWN TABLES (Crucial for Tuition fees) */
+/* MARKDOWN TABLES (Crucial for Tuition fees & Curriculum tables) */
 .table-wrapper {
     width: 100%;
+    max-width: 100%;
     overflow-x: auto;
-    margin: 16px 0;
+    margin: 14px 0;
     border-radius: var(--radius-md);
     border: 1px solid var(--table-border);
     background-color: var(--bg-card);
@@ -1024,34 +1031,37 @@ body {
 
 .msg-bubble table {
     width: 100%;
+    max-width: 100%;
     border-collapse: collapse;
-    font-size: 0.92rem;
+    table-layout: auto;
+    font-size: 0.9rem;
     text-align: left;
-    min-width: 520px;
     word-break: normal !important;
-    overflow-wrap: normal !important;
+    overflow-wrap: break-word !important;
 }
 
 .msg-bubble th {
     background-color: var(--table-header-bg);
     color: var(--text-primary);
     font-weight: 700;
-    padding: 12px 16px;
+    padding: 10px 14px;
     border-bottom: 2px solid var(--table-border);
     font-family: var(--font-heading);
-    white-space: nowrap !important;
+    white-space: nowrap;
     word-break: keep-all !important;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.2px;
     vertical-align: middle;
 }
 
 .msg-bubble td {
-    padding: 12px 16px;
+    padding: 10px 14px;
     border-bottom: 1px solid var(--table-border);
     color: var(--text-primary);
-    vertical-align: middle;
+    vertical-align: top;
+    white-space: normal;
     word-break: normal !important;
-    line-height: 1.5;
+    overflow-wrap: break-word;
+    line-height: 1.55;
 }
 
 /* Đảm bảo toàn bộ chữ và số trong bảng không bị ngắt ngang ký tự */
@@ -1061,12 +1071,14 @@ body {
     -webkit-hyphens: none !important;
 }
 
-/* Các cột ngắn như Khóa tuyển sinh, ĐVT, Mức học phí hiển thị gọn gàng */
-.msg-bubble td:last-child {
-    font-weight: 700;
-    color: var(--primary);
-    white-space: nowrap !important;
+/* Cột STT / TT đầu bảng luôn gọn gàng */
+.msg-bubble th:first-child,
+.msg-bubble td.col-stt {
+    width: 52px;
+    min-width: 44px;
+    max-width: 64px;
     text-align: center;
+    white-space: nowrap;
 }
 
 .msg-bubble tr:nth-child(even) td {
@@ -3000,21 +3012,25 @@ select option:hover,
 .messenger-voice-player {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     padding: 8px 14px;
-    background: rgba(0, 0, 0, 0.22);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 26px;
-    min-width: 250px;
-    max-width: 100%;
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 28px;
+    width: 100%;
+    min-width: 180px;
+    max-width: 440px;
+    box-sizing: border-box;
     margin-bottom: 6px;
-    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     transition: all var(--transition-fast);
 }
 
 .messenger-voice-player:hover {
     background: rgba(0, 0, 0, 0.32);
-    border-color: rgba(255, 255, 255, 0.35);
+    border-color: rgba(255, 255, 255, 0.38);
 }
 
 .voice-bubble-play-btn {
@@ -3023,7 +3039,7 @@ select option:hover,
     min-width: 36px;
     border-radius: 50%;
     background: #ffffff;
-    color: #c41e3a;
+    color: var(--primary, #c41e3a);
     border: none;
     cursor: pointer;
     display: flex;
@@ -3042,7 +3058,7 @@ select option:hover,
 
 .voice-bubble-play-btn.playing {
     background: #ffffff;
-    color: #c41e3a;
+    color: var(--primary, #c41e3a);
     animation: voicePlayPulse 1.2s infinite;
 }
 
@@ -3063,48 +3079,38 @@ select option:hover,
 .voice-bubble-wave-wrap {
     flex: 1;
     position: relative;
-    height: 30px;
+    height: 32px;
     display: flex;
     align-items: center;
     cursor: pointer;
-    padding: 0 4px;
-    min-width: 120px;
+    padding: 0;
+    min-width: 60px;
+    box-sizing: border-box;
 }
 
 .voice-bubble-wave-bars {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 2.5px;
     width: 100%;
     height: 24px;
+    overflow: hidden;
 }
 
 .voice-bar {
-    flex: 1;
+    flex: 1 1 0px;
     min-width: 2px;
-    max-width: 4px;
+    max-width: 4.5px;
     background: rgba(255, 255, 255, 0.38);
     border-radius: 3px;
-    transition: background 0.12s ease, transform 0.15s ease;
+    transition: background 0.1s ease, transform 0.12s ease;
 }
 
 .voice-bar.active {
     background: #ffffff;
     box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
     transform: scaleY(1.08);
-}
-
-.voice-bubble-progress {
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    height: 2px;
-    background: #ffffff;
-    border-radius: 2px;
-    width: 0%;
-    transition: width 0.08s linear;
-    pointer-events: none;
-    box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
 }
 
 .voice-bubble-duration {
@@ -3116,23 +3122,25 @@ select option:hover,
     min-width: 32px;
     text-align: right;
     letter-spacing: 0.5px;
+    user-select: none;
 }
 
 .voice-bubble-dl-btn {
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(255, 255, 255, 0.8);
     font-size: 0.86rem;
     padding: 4px 6px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: 6px;
     text-decoration: none;
+    flex-shrink: 0;
     transition: color 0.15s ease, background 0.15s ease;
 }
 
 .voice-bubble-dl-btn:hover {
     color: #ffffff;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.18);
 }
 
 /* Transcript text underneath the audio in the question bubble */
@@ -3158,6 +3166,41 @@ select option:hover,
 
 .voice-bubble-transcript span {
     flex: 1;
+}
+
+/* Responsive Voice Message Player on Mobile */
+@media (max-width: 600px) {
+    .messenger-voice-player {
+        padding: 6px 10px;
+        gap: 8px;
+        min-width: 160px;
+        border-radius: 22px;
+    }
+
+    .voice-bubble-play-btn {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        font-size: 0.82rem;
+    }
+
+    .voice-bubble-wave-wrap {
+        height: 28px;
+        min-width: 50px;
+    }
+
+    .voice-bubble-wave-bars {
+        gap: 2px;
+    }
+
+    .voice-bar {
+        min-width: 1.5px;
+    }
+
+    .voice-bubble-duration {
+        font-size: 0.75rem;
+        min-width: 28px;
+    }
 }
 
 /* Enhanced Recording Pulse Animation for Voice Button */
@@ -3254,4 +3297,359 @@ select option:hover,
 .voice-current-status strong {
     color: var(--text-primary);
     font-weight: 600;
+}
+
+/* =========================================================================
+   INLINE CITATIONS (MẪU 1) TRONG NỘI DUNG CÂU TRẢ LỜI
+   ========================================================================= */
+.msg-bubble hr.citation-section-divider {
+    margin: 16px 0 12px 0;
+    border: none;
+    border-top: 1px dashed var(--border-subtle);
+    opacity: 0.85;
+}
+
+.msg-bubble .citation-section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 10px 0 8px 0 !important;
+    letter-spacing: 0.01em;
+}
+
+.msg-bubble ul.citation-list-inline,
+.msg-bubble ol.citation-list-inline {
+    list-style: none !important;
+    padding-left: 0 !important;
+    margin: 6px 0 4px 0 !important;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.msg-bubble li.citation-list-item {
+    list-style: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.inline-citation-chip {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 13px;
+    border-radius: 10px;
+    background: rgba(211, 0, 0, 0.06);
+    border: 1px solid rgba(211, 0, 0, 0.24);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.86rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.inline-citation-chip:hover {
+    background: rgba(211, 0, 0, 0.13);
+    border-color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(211, 0, 0, 0.14);
+}
+
+.inline-citation-chip:active {
+    transform: translateY(0);
+}
+
+.cite-chip-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(211, 0, 0, 0.14);
+    color: var(--primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.cite-chip-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    line-height: 1.45;
+}
+
+.cite-chip-main {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.cite-chip-main strong {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.cite-chip-title {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.cite-chip-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--primary);
+    font-size: 0.76rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: all 0.18s ease;
+}
+
+.inline-citation-chip:hover .cite-chip-action {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #ffffff;
+}
+
+/* =========================================================================
+   DOCUMENT & PAGE VIEWER MODAL (#sourceModal)
+   ========================================================================= */
+#sourceModal {
+    padding: 10px 14px;
+}
+
+#sourceModal.is-fullscreen {
+    padding: 0 !important;
+}
+
+.modal-content.modal-xl.source-viewer-modal {
+    max-width: 1440px;
+    width: 96vw;
+    height: 96vh;
+    max-height: 96vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-content.modal-xl.source-viewer-modal.is-fullscreen {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    border: none !important;
+}
+
+.source-modal-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: nowrap;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+    min-height: 52px;
+    flex-shrink: 0;
+}
+
+.source-modal-header .modal-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+
+.source-modal-header .modal-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.source-modal-header .modal-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.source-modal-header .modal-subtitle {
+    font-size: 0.74rem;
+    margin: 0;
+    line-height: 1.2;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Cụm nút thao tác ở góc trên bên phải của Header (Mở tab mới & Dấu X đóng) */
+.source-modal-top-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    z-index: 20;
+}
+
+.source-open-newtab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: all var(--transition-fast);
+}
+
+.source-open-newtab-btn i {
+    font-size: 0.78rem;
+    color: var(--primary);
+    transition: color var(--transition-fast);
+}
+
+.source-open-newtab-btn:hover {
+    background: rgba(211, 0, 0, 0.08);
+    border-color: rgba(211, 0, 0, 0.35);
+    color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.source-top-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.92rem;
+    transition: all var(--transition-fast);
+}
+
+.source-top-btn:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.source-top-btn.source-close-btn {
+    color: var(--text-muted);
+}
+
+.source-top-btn.source-close-btn:hover {
+    background: rgba(239, 68, 68, 0.14);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    transform: scale(1.05);
+}
+
+.source-modal-body {
+    flex: 1;
+    min-height: 0;
+    padding: 0 !important;
+    position: relative;
+    background: var(--bg-primary);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.source-view-pane {
+    display: none;
+    width: 100%;
+    height: 100%;
+    flex: 1;
+    min-height: 0;
+}
+
+.source-view-pane.active {
+    display: flex;
+    flex-direction: column;
+}
+
+.source-pdf-iframe {
+    width: 100%;
+    height: 100%;
+    flex: 1;
+    border: none;
+    background: #2b2b2b;
+}
+
+#sourceTextPane {
+    padding: 16px 20px;
+    overflow-y: auto;
+}
+
+#sourceTextPane .source-code-block {
+    margin: 0;
+    flex: 1;
+}
+
+@media (max-width: 768px) {
+    #sourceModal {
+        padding: 4px;
+    }
+
+    .inline-citation-chip {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .cite-chip-action {
+        margin-left: 44px;
+    }
+
+    .modal-content.modal-xl.source-viewer-modal {
+        width: 99vw;
+        height: 98vh;
+        max-height: 98vh;
+        border-radius: var(--radius-md);
+    }
+
+    .source-modal-header {
+        padding: 8px 10px;
+        gap: 8px;
+    }
+
+    .source-open-newtab-btn span {
+        display: none;
+    }
+
+    .source-open-newtab-btn {
+        padding: 0 10px;
+    }
 }

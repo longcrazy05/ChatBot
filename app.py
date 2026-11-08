@@ -9,9 +9,10 @@ import hashlib
 import requests
 from requests.adapters import HTTPAdapter
 import subprocess
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_file
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import quote
 import document_parser
 import voice_service
 
@@ -21,10 +22,129 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CHROMA_DIR = os.path.join(BASE_DIR, "chroma_db")
 PROCESSED_DIR = os.path.join(BASE_DIR, "processed_data")
+DATA_DIR = os.path.join(BASE_DIR, "data")
 VOICE_UPLOAD_DIR = os.path.join(BASE_DIR, "static", "voice_uploads")
 USER_UPLOADS_DIR = os.path.join(BASE_DIR, "user_uploads")
 os.makedirs(VOICE_UPLOAD_DIR, exist_ok=True)
 os.makedirs(USER_UPLOADS_DIR, exist_ok=True)
+
+# Danh mục ánh xạ chuẩn giữa tên file Markdown nội bộ, file PDF gốc và tên văn bản chính thức
+PTIT_DOC_METADATA = {
+    "clb": {
+        "pdf_file": "clb.pdf",
+        "md_file": "clb.md",
+        "title": "Danh sách Câu lạc bộ Sinh viên PTIT",
+        "category": "Hoạt động Sinh viên"
+    },
+    "ct_cntt": {
+        "pdf_file": "ct_cntt.pdf",
+        "md_file": "ct_cntt.md",
+        "title": "Quyết định 979/QĐ-HV Chương trình đào tạo ngành CNTT",
+        "category": "Chương trình Đào tạo"
+    },
+    "doi_diem_clc": {
+        "pdf_file": "doi_diem_clc.pdf",
+        "md_file": "doi_diem_clc.md",
+        "title": "Bảng quy đổi điểm tiếng Anh Chương trình Chất lượng cao",
+        "category": "Quy chế Đào tạo"
+    },
+    "giang_vien": {
+        "pdf_file": "giang_vien.pdf",
+        "md_file": "giang_vien.md",
+        "title": "Danh sách Giảng viên cơ hữu Học viện PTIT",
+        "category": "Thông tin Giảng viên"
+    },
+    "hb_hk1_25-26": {
+        "pdf_file": "HB_HK1_25-26.pdf",
+        "md_file": "HB_HK1_25-26.md",
+        "title": "Điểm chuẩn Học bổng KKHT Học kỳ 1 năm học 2025-2026",
+        "category": "Học bổng"
+    },
+    "hp_2025": {
+        "pdf_file": "hp_2025.pdf",
+        "md_file": "hp_2025.md",
+        "title": "Quyết định 1120/QĐ-HV Mức thu học phí năm học 2025-2026",
+        "category": "Học phí"
+    },
+    "hp_2026": {
+        "pdf_file": "hp_2026.pdf",
+        "md_file": "hp_2026.md",
+        "title": "Quyết định 1462/QĐ-HV Mức thu học phí năm học 2026-2027",
+        "category": "Học phí"
+    },
+    "mau-don-sinh-vien": {
+        "pdf_file": "Mau-don-sinh-vien.pdf",
+        "md_file": "Mau-don-sinh-vien.md",
+        "title": "Tổng hợp Biểu mẫu Đơn từ Sinh viên PTIT",
+        "category": "Biểu mẫu Sinh viên"
+    },
+    "mien_giam_hp": {
+        "pdf_file": "mien_giam_hp.pdf",
+        "md_file": "mien_giam_hp.md",
+        "title": "Thông báo Chính sách Miễn giảm học phí & Hỗ trợ chi phí học tập",
+        "category": "Chính sách & Học phí"
+    },
+    "mien_hoc_thi": {
+        "pdf_file": "mien_hoc_thi.pdf",
+        "md_file": "mien_hoc_thi.md",
+        "title": "Thông báo Xét miễn học, miễn thi & Chuyển đổi điểm tiếng Anh",
+        "category": "Quy chế Đào tạo"
+    },
+    "mon_hoc": {
+        "pdf_file": "mon_hoc.pdf",
+        "md_file": "mon_hoc.md",
+        "title": "Khung Chương trình đào tạo & Danh mục Học phần ngành CNTT",
+        "category": "Chương trình Đào tạo"
+    },
+    "so_tay": {
+        "pdf_file": "so_tay.pdf",
+        "md_file": "so_tay.md",
+        "title": "Sổ tay Sinh viên Học viện Công nghệ Bưu chính Viễn thông",
+        "category": "Sổ tay & Quy chế"
+    },
+    "ts_thac_si": {
+        "pdf_file": "ts_thac_si.pdf",
+        "md_file": "ts_thac_si.md",
+        "title": "Thông báo Tuyển sinh trình độ Thạc sĩ năm 2026",
+        "category": "Tuyển sinh"
+    },
+}
+
+
+def resolve_doc_display_info(raw_filename, is_user_doc=False):
+    """Chuẩn hóa tên file trích dẫn (.md -> .pdf) kèm tên văn bản hiển thị chuẩn Mẫu 1."""
+    if not raw_filename:
+        return {
+            "file": "Tai_lieu_PTIT.pdf",
+            "md_file": None,
+            "title": "Tài liệu Học viện PTIT",
+            "is_user_doc": is_user_doc
+        }
+    clean_name = os.path.basename(str(raw_filename).strip())
+    stem = os.path.splitext(clean_name)[0].lower()
+    if not is_user_doc and stem in PTIT_DOC_METADATA:
+        meta = PTIT_DOC_METADATA[stem]
+        return {
+            "file": meta["pdf_file"],
+            "md_file": meta["md_file"],
+            "title": meta["title"],
+            "is_user_doc": False
+        }
+    if is_user_doc:
+        return {
+            "file": clean_name,
+            "md_file": None,
+            "title": "Tài liệu người dùng tải lên",
+            "is_user_doc": True
+        }
+    # Trường hợp file PTIT mới chưa khai báo cứng trong từ điển
+    pdf_guess = f"{os.path.splitext(clean_name)[0]}.pdf" if clean_name.lower().endswith(".md") else clean_name
+    return {
+        "file": pdf_guess,
+        "md_file": f"{os.path.splitext(clean_name)[0]}.md",
+        "title": f"Tài liệu Học viện ({pdf_guess})",
+        "is_user_doc": False
+    }
 
 # ==============================================================================
 # TỐI ƯU 2: HTTP KEEP-ALIVE SESSION & QUẢN LÝ MODEL THÔNG MINH (STICKY MODEL)
@@ -292,6 +412,28 @@ VI_STOPWORDS = {
     "được", "không", "hãy", "về", "theo", "tại", "và", "hoặc", "thì",
     "mà", "ở", "khi", "nếu", "để", "từ", "đến", "cần", "phải", "một"
 }
+
+GENERIC_PTIT_WORDS = VI_STOPWORDS | {
+    "sinh", "viên", "học", "viện", "ptit", "trường", "tập", "điều", "kiện",
+    "tiêu", "chuẩn", "quy", "định", "xét", "cấp", "thông", "tin", "biết",
+    "hỏi", "xin", "công", "nghệ", "bưu", "chính", "viễn", "phòng", "ban",
+    "liên", "hệ", "nhà", "báo", "cụ", "thể", "chi", "tiết", "hiện", "nay"
+}
+
+
+def normalize_academic_query(text):
+    """
+    Chuẩn hóa các từ viết tắt hoặc lỗi nhận diện giọng nói (STT) phổ biến của sinh viên PTIT:
+    - 'gba', 'g p a', 'ji pi ay' -> 'GPA'
+    - 'pê tít', 'pờ tít' -> 'PTIT'
+    """
+    if not text:
+        return ""
+    s = text.strip()
+    s = re.sub(r"\b(?:gba|g\.p\.a|g\s+p\s+a|ji\s*pi\s*ay)\b", "GPA", s, flags=re.IGNORECASE)
+    s = re.sub(r"\b(?:pê\s*tít|pê\s*tit|pờ\s*tít)\b", "PTIT", s, flags=re.IGNORECASE)
+    return s
+
 
 _query_embedding_cache = {}
 
@@ -836,23 +978,36 @@ def keyword_search_all(query, processed_dir=PROCESSED_DIR, top_k=3):
     if not _RAM_PARSED_PAGES:
         return []
 
-    q_lower = query.lower().strip()
+    q_norm = normalize_academic_query(query)
+    q_lower = q_norm.lower().strip()
     raw_words = [w for w in re.findall(r"\w+", q_lower) if len(w) > 1]
     if not raw_words:
         return []
     q_words = [w for w in raw_words if w not in VI_STOPWORDS] or raw_words
     q_word_set = set(q_words)
 
-    is_form_q = any(k in q_lower for k in ["mẫu đơn", "mau don", "đơn xin", "don xin", "đơn đề nghị", "biểu mẫu", "vắng thi", "nghỉ học", "thôi học", "phúc khảo"])
-    is_doi_diem_q = any(k in q_lower for k in ["quy đổi", "quy doi", "đổi điểm", "doi diem", "chuyển điểm", "ielts", "toefl", "toeic", "aptis"])
+    is_form_q = any(k in q_lower for k in ["mẫu đơn", "mau don", "đơn xin", "don xin", "đơn đề nghị", "biểu mẫu", "vắng thi", "nghỉ học", "thôi học", "phúc khảo", "hoãn thi"])
+    is_doi_diem_q = any(k in q_lower for k in ["quy đổi", "quy doi", "đổi điểm", "doi diem", "chuyển điểm", "ielts", "toefl", "toeic", "aptis", "chuẩn đầu ra tiếng anh"])
     is_gv_q = any(k in q_lower for k in ["giảng viên", "giang vien", "thầy", "cô", "pgs", "tiến sĩ"])
     is_hp_q = any(k in q_lower for k in ["học phí", "hoc phi", "mức thu"])
-    is_hb_q = any(k in q_lower for k in ["học bổng", "hoc bong", "khuyến khích"])
+    has_gpa_kw = any(k in q_lower for k in ["gpa", "gba", "tbcmr", "điểm trung bình", "diem trung binh", "điểm tbc", "tbcht"])
+    has_drl_kw = any(k in q_lower for k in ["rèn luyện", "ren luyen", "đrl", "drl"])
+    has_hb_level_kw = any(k in q_lower for k in ["loại xuất sắc", "loại giỏi", "loại khá", "học bổng xuất sắc", "học bổng giỏi", "học bổng khá"])
+    is_the_sv_q = any(k in q_lower for k in ["thẻ sinh viên", "the sinh vien", "mất thẻ", "đeo thẻ", "làm lại thẻ", "cấp lại thẻ"])
+    is_hb_q = (
+        any(k in q_lower for k in ["học bổng", "hoc bong", "khuyến khích", "hb kkht", "tbcmr"])
+        or has_hb_level_kw
+        or (has_gpa_kw and has_drl_kw)
+        or (has_gpa_kw and any(k in q_lower for k in ["điều kiện", "tiêu chuẩn", "xét", "bao nhiêu", "như thế nào", "thì được", "cần"]))
+        or (has_drl_kw and not is_the_sv_q and any(k in q_lower for k in ["điều kiện", "tiêu chuẩn", "xét", "bao nhiêu", "như thế nào", "thì được", "loại", "đạt"]))
+    )
     is_ktx_q = any(k in q_lower for k in ["ký túc xá", "kí túc xá", "ktx", "sơ đồ", "mặt bằng", "khuôn viên", "nhà a1", "nhà a2", "nhà a3", "nhà b2", "b2"])
     is_ctdt_q = any(k in q_lower for k in ["chương trình đào tạo", "khối lượng", "tốt nghiệp", "môn học", "học phần", "tín chỉ", "tiên quyết", "chuyên ngành", "int1"])
     is_sotay_q = any(k in q_lower for k in ["quy chế", "sổ tay", "học lại", "cải thiện", "cảnh báo", "buộc thôi học", "rèn luyện", "điểm chữ", "hệ 4"])
     is_clb_q = any(k in q_lower for k in ["câu lạc bộ", "clb", "đoàn", "hội sinh viên"])
     is_miengiam_q = any(k in q_lower for k in ["miễn giảm", "trợ cấp", "hộ nghèo", "chính sách"])
+    is_mien_hoc_thi_q = any(k in q_lower for k in ["miễn học", "miễn thi", "chuyển điểm tiếng anh"])
+    is_thac_si_q = any(k in q_lower for k in ["thạc sĩ", "cao học", "sau đại học", "tuyển sinh thạc sĩ"])
 
     cohort_matches = re.findall(r"(?:kh[oó]a\s*|k)(\d{2,4})|\b(202[0-9])\b", q_lower)
     target_cohorts = []
@@ -865,12 +1020,16 @@ def keyword_search_all(query, processed_dir=PROCESSED_DIR, top_k=3):
     has_2025 = "2025" in q_lower
     is_cntt_q = any(m in q_lower for m in ["cntt", "công nghệ thông tin", "an toàn thông tin", "máy tính"])
 
-    # Tiền tính toán danh sách cụm từ con (subphrases) 1 lần ngoài vòng lặp
+    # Tiền tính toán danh sách cụm từ con (subphrases) 1 lần ngoài vòng lặp.
+    # Cụm từ chứa từ khóa đặc trưng (không thuộc từ phổ thông GENERIC_PTIT_WORDS) được trọng số cao gấp 7 lần.
     subphrases = []
     max_l = min(len(raw_words), 5)
     for l in range(max_l, 1, -1):
         for start in range(len(raw_words) - l + 1):
-            subphrases.append((" ".join(raw_words[start:start + l]), 35 * l))
+            chunk_words = raw_words[start:start + l]
+            has_distinctive = any(cw not in GENERIC_PTIT_WORDS for cw in chunk_words)
+            sp_weight = (40 * l) if has_distinctive else (5 * l)
+            subphrases.append((" ".join(chunk_words), sp_weight))
 
     results = []
     for item in _RAM_PARSED_PAGES:
@@ -878,8 +1037,20 @@ def keyword_search_all(query, processed_dir=PROCESSED_DIR, top_k=3):
         fname_lower = item["fname_lower"]
         p_num = item["p_num"]
 
+        is_special_doc = (
+            (is_hp_q and "hp_" in fname_lower)
+            or (is_hb_q and ("hb_" in fname_lower or ("so_tay" in fname_lower and p_num == 39)))
+            or (is_doi_diem_q and "doi_diem" in fname_lower)
+            or (is_gv_q and "giang_vien" in fname_lower)
+            or (is_clb_q and "clb" in fname_lower)
+            or (is_miengiam_q and "mien_giam" in fname_lower)
+            or (is_mien_hoc_thi_q and "mien_hoc_thi" in fname_lower)
+            or (is_thac_si_q and "ts_thac_si" in fname_lower)
+            or (is_ktx_q and "so_tay" in fname_lower and p_num == 9)
+        )
+
         # Bỏ qua ngay lập tức (O(1)) nếu trang không chứa bất kỳ từ khóa nào và không thuộc nhóm trang đặc biệt
-        if not matched_words and not (is_hp_q and "hp_" in fname_lower) and not (is_ktx_q and p_num == 9):
+        if not matched_words and not is_special_doc:
             continue
 
         p_lower = item["p_lower"]
@@ -888,35 +1059,68 @@ def keyword_search_all(query, processed_dir=PROCESSED_DIR, top_k=3):
         score = 0
         # 1. Khớp cụm từ chính xác
         if q_lower in p_lower:
-            score += 120
+            score += 150
         elif len(matched_words) >= 2:
             for sp, sp_weight in subphrases:
                 if sp in p_lower:
                     score += sp_weight
 
-        # 2. Khớp từ khóa đơn (chỉ đếm trên các từ đã biết chắc chắn có trong word_set của trang)
-        score += sum(p_lower.count(w) * 4 for w in matched_words)
+        # 2. Khớp từ khóa đơn (giới hạn tối đa 5 lần/từ trên 1 trang để các từ phổ thông "sinh", "viên", "học" không làm nhiễu điểm)
+        for w in matched_words:
+            cnt = min(p_lower.count(w), 5)
+            score += cnt * (2 if w in GENERIC_PTIT_WORDS else 10)
 
         # 3. Ưu tiên theo tài liệu chuyên biệt
         if is_form_q and item["is_form_page"]:
-            score += 200
+            score += 220
         elif is_form_q and "so_tay" in fname_lower:
             score = score * 0.1
 
         if is_doi_diem_q and "doi_diem" in fname_lower:
-            score += 250
+            score += 280
         if is_gv_q and "giang_vien" in fname_lower:
-            score += 200
-        if is_hb_q and "hb_" in fname_lower:
-            score += 180
+            score += 250
+        if is_hb_q:
+            if "hb_" in fname_lower:
+                score += 380
+                if p_num == 1:
+                    score += 80
+                for tc in target_cohorts:
+                    if tc in p_lower:
+                        score += 120
+                if any(k in q_lower for k in ["clc", "chất lượng cao", "báo chí", "khmt", "khoa học máy tính", "iot", "điều khiển", "tài chính"]) and p_num == 3:
+                    score += 180
+                if any(k in q_lower for k in ["game", "vi mạch", "bán dẫn", "trí tuệ nhân tạo", "quan hệ công chúng", "logistic", "nhật"]) and p_num == 4:
+                    score += 180
+                if any(k in q_lower for k in ["attt", "an toàn thông tin", "qtkd", "quản trị", "kế toán", "marketing", "tmđt", "thương mại điện tử", "truyền thông"]) and p_num == 2:
+                    score += 180
+            elif "so_tay" in fname_lower:
+                if "học bổng" in p_lower:
+                    score += 435
+                else:
+                    score = score * 0.12
+            elif "mien_giam" in fname_lower and "học bổng" in p_lower:
+                score += 140
+
+        # Giảm trọng số các trang sổ ghi chép trống ở cuối Sổ tay sinh viên (Trang 70-76) và trang Thẻ sinh viên (Trang 43-44) khi không hỏi về thẻ
+        if "so_tay" in fname_lower:
+            if p_num >= 70:
+                score = score * 0.02
+            elif p_num in (43, 44) and not is_the_sv_q:
+                score = score * 0.15
+
         if is_ctdt_q and ("ct_cntt" in fname_lower or "mon_hoc" in fname_lower):
-            score += 90
-        if is_sotay_q and "so_tay" in fname_lower:
+            score += 110
+        if is_sotay_q and "so_tay" in fname_lower and not is_hb_q:
             score += 90
         if is_clb_q and "clb" in fname_lower:
-            score += 180
+            score += 220
         if is_miengiam_q and "mien_giam" in fname_lower:
-            score += 180
+            score += 220
+        if is_mien_hoc_thi_q and "mien_hoc_thi" in fname_lower:
+            score += 250
+        if is_thac_si_q and "ts_thac_si" in fname_lower:
+            score += 250
 
         # Xử lý tìm kiếm học phí chính xác
         if is_hp_q and "hp_" in fname_lower:
@@ -1087,6 +1291,15 @@ NGUYÊN TẮC BẮT BUỘC:
 1. TRUNG THỰC & CHUẨN XÁC (QUAN TRỌNG NHẤT):
    - Trả lời đúng trọng tâm câu hỏi dựa vào tài liệu được cung cấp bên trên.
    - Khi hỏi về HỌC PHÍ của một khóa / ngành / năm học: Nêu rõ mức học phí (đồng/tín chỉ) của từng hệ đào tạo (Chương trình chuẩn/đại trà, Chất lượng cao, Cử nhân định hướng ứng dụng...) có trong tài liệu dưới dạng danh sách gạch đầu dòng chi tiết (- **Hệ đào tạo:** Mức phí đồng/tín chỉ). TUYỆT ĐỐI KHÔNG chép lại phần văn bản hành chính mở đầu (Căn cứ quyết định, Căn cứ nghị định...).
+   - Khi hỏi về HỌC BỔNG KHUYẾN KHÍCH HỌC TẬP hoặc hỏi về ĐIỂM GPA / ĐIỂM TRUNG BÌNH (TBCMR) VÀ ĐIỂM RÈN LUYỆN (điều kiện, tiêu chuẩn xét cấp, điểm chuẩn, xếp loại học bổng hoặc mức tiền học bổng theo file HB_HK1_25-26.pdf và so_tay.pdf):
+     + Kể cả khi người dùng chỉ hỏi ngắn gọn như "GPA và điểm rèn luyện như thế nào thì được", "loại giỏi cần điều kiện gì", hãy hiểu người dùng đang hỏi về tiêu chuẩn điểm GPA (Điểm TBCMR) và Điểm rèn luyện để xét cấp Học bổng khuyến khích học tập tại PTIT và trả lời đầy đủ!
+     + Giải thích rõ 2 tiêu chí xét cấp bắt buộc tại PTIT (theo bảng kết quả xét cấp học bổng khuyến khích học tập HK1 năm học 2025-2026 - File `HB_HK1_25-26.pdf`): Sinh viên phải đạt đồng thời chuẩn **Điểm trung bình chung mở rộng (Điểm TBCMR / GPA - thang điểm 4)** và **Điểm rèn luyện (Điểm RL - thang điểm 100)** theo quy định của từng ngành, từng khóa tại cơ sở đào tạo Hà Nội (HN) hoặc TP. Hồ Chí Minh (HCM) trong phạm vi quỹ học bổng.
+     + Nêu rõ tiêu chuẩn cụ thể của 3 mức học bổng trong bảng `HB_HK1_25-26.pdf`:
+       * **Học bổng loại Xuất sắc:** Điểm rèn luyện (ĐRL) đạt từ **90 điểm trở lên** và Điểm TBCMR (GPA) đạt từ **3,60 trở lên** (một số ngành/khóa có mức điểm chuẩn TBCMR thực tế từ 3,60 đến 3,76).
+       * **Học bổng loại Giỏi:** Điểm rèn luyện (ĐRL) đạt từ **80 điểm trở lên** (tùy ngành/khóa từ 80 đến 90 điểm) và Điểm TBCMR (GPA) đạt tối thiểu từ **3,20 trở lên** (điểm chuẩn thực tế dao động từ 3,20 đến 3,92 tùy ngành, khóa và cơ sở).
+       * **Học bổng loại Khá:** Điểm rèn luyện (ĐRL) đạt từ **65 điểm trở lên** (tùy ngành/khóa từ 65 đến 88 điểm) và Điểm TBCMR (GPA) đạt tối thiểu từ **2,50 trở lên** (điểm chuẩn thực tế từ 2,50 đến 3,80 tại các ngành/khóa còn chỉ tiêu quỹ học bổng; nếu cột loại Khá ghi dấu `-` nghĩa là ngành/khóa đó đã xét hết chỉ tiêu quỹ học bổng ở mức Xuất sắc và Giỏi).
+     + Nêu rõ quy định tại Điều 6 khoản 2.2 Sổ tay sinh viên (`so_tay.pdf` - Trang 39): Kết quả học cải thiện điểm chỉ dùng để tính điểm trung bình chung tích lũy, **không sử dụng để xét khen thưởng, học bổng**.
+     + Nêu ví dụ mức tiền học bổng (đơn vị trong bảng là nghìn đồng, ví dụ 17.480 nghìn đồng = 17.480.000 đồng/học kỳ) hoặc lập bảng chi tiết nếu người dùng hỏi cụ thể một ngành/khóa.
    - Khi câu hỏi yêu cầu SO SÁNH (ví dụ so sánh học phí giữa các năm 2025 và 2026, hoặc so sánh giữa các khóa/hệ): Trình bày bảng so sánh Markdown trực quan, chi tiết từng hệ đào tạo/ngành qua các năm và phân tích mức chênh lệch cụ thể (tăng/giảm bao nhiêu).
    - Nếu tài liệu có thông tin: Trả lời ngắn gọn, đầy đủ, mạch lạc.
    - Nếu tài liệu chỉ có thông tin MỘT PHẦN (ví dụ: có vị trí tòa nhà KTX B2 trên sơ đồ nhưng không có bảng giá phòng hay điều kiện nội trú): Hãy nêu rõ những thông tin có trong tài liệu, và thông báo rõ phần thông tin chưa có trong tài liệu kèm hướng dẫn liên hệ phòng ban phụ trách (Phòng Chính trị & Công tác sinh viên tại Nhà A1, Ban quản lý KTX...).
@@ -1100,8 +1313,17 @@ NGUYÊN TẮC BẮT BUỘC:
 3. VĂN PHONG:
    - Thân thiện, tôn trọng, khách quan.
    - TUYỆT ĐỐI KHÔNG dùng ký hiệu LaTeX toán học như $\\ge$, $\\le$ hay dấu $, hãy dùng tiếng Việt tự nhiên (>=, <=, "từ... trở lên").
-   - TUYỆT ĐỐI KHÔNG để lộ tên file Markdown nội bộ của hệ thống (ví dụ: hp_2025.md, so_tay_sinh_vien.md) hay ghi chú debug `[SCAN_TABLE]` trong câu trả lời.
-{user_docs_instruction}"""
+   - Không ghi chú debug như `[SCAN_TABLE]` hay `[TEXT]` trong câu trả lời.
+{user_docs_instruction}
+5. MỤC TRÍCH DẪN NGUỒN TÀI LIỆU Ở CUỐI CÂU TRẢ LỜI (BẮT BUỘC):
+   - Khi câu trả lời được trích xuất từ tài liệu ngữ cảnh ở trên, BẮT BUỘC phải có mục trích dẫn ở cuối cùng của câu trả lời theo ĐÚNG định dạng Mẫu 1 dưới đây:
+   📌 **Nguồn trích dẫn:**
+   - 📄 Trang <số_trang> - File: <tên_file_gốc> (<Tên văn bản>)
+   - Ví dụ chuẩn:
+   📌 **Nguồn trích dẫn:**
+   - 📄 Trang 3 - File: hp_2025.pdf (Quyết định 1120/QĐ-HV Mức thu học phí năm học 2025-2026)
+   - Mỗi trang trích dẫn viết trên 1 dòng gạch đầu dòng riêng biệt. CHỈ liệt kê đúng trang và file thực sự chứa thông tin dùng để trả lời câu hỏi.
+   - QUAN TRỌNG: Nếu tài liệu hoàn toàn không có thông tin hoặc chưa có đủ dữ liệu để trả lời câu hỏi thì TUYỆT ĐỐI KHÔNG viết mục '📌 Nguồn trích dẫn' và KHÔNG liệt kê bất kỳ file/trang nào."""
 
 
 def generate_llm_answer(question, context_str, custom_api_key=None, preferred_model=None, history=None, has_user_docs=False, user_files=None, scope="hybrid"):
@@ -1136,8 +1358,6 @@ def clean_llm_response(text):
     """Làm sạch văn bản trả lời, chuyển bảng 1 dòng sang gạch đầu dòng, sửa LaTeX."""
     if not text:
         return ""
-    text = re.sub(r"\n*📌\s*\*\*Nguồn[^\n]*\n*", "\n", text, flags=re.IGNORECASE)
-    text = re.sub(r"\n*\*\*Nguồn tài liệu[^\n]*\n*", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"\[[^\]]+\.md\s*\|\s*Trang\s*\d+[^\]]*\]", "", text, flags=re.IGNORECASE)
     text = re.sub(r"##\s*Trang\s*\d+.*?\n", "", text, flags=re.IGNORECASE)
 
@@ -1190,6 +1410,212 @@ def clean_llm_response(text):
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
+REFUSAL_PHRASES = [
+    "chưa có thông tin",
+    "không có thông tin",
+    "chưa chứa đầy đủ thông tin",
+    "không chứa đầy đủ thông tin",
+    "chưa có đầy đủ thông tin",
+    "không có đầy đủ thông tin",
+    "chưa có đủ thông tin",
+    "không có đủ thông tin",
+    "hiện chưa tìm thấy thông tin",
+    "không tìm thấy thông tin",
+    "chưa tìm thấy thông tin",
+    "chưa đề cập đến",
+    "không đề cập đến",
+    "chưa được đề cập",
+    "không được đề cập",
+    "không có dữ liệu",
+    "chưa có dữ liệu",
+    "chưa có đủ dữ liệu",
+    "không có đủ dữ liệu",
+    "chưa đủ dữ liệu",
+    "không đủ dữ liệu",
+    "nằm ngoài phạm vi",
+    "chưa được cung cấp trong",
+    "không tìm thấy dữ liệu"
+]
+
+REFUSAL_REGEX_PATTERNS = [
+    re.compile(r"(?:chưa|không)\s+(?:có|chứa|tìm\s+thấy|được\s+cung\s+cấp|đề\s+cập)(?:\s+đầy\s+đủ|\s+đủ|\s+chi\s+tiết|\s+cụ\s+thể)*\s*(?:thông\s+tin|dữ\s+liệu)", re.IGNORECASE),
+    re.compile(r"tài\s+liệu.*?(?:chưa|không)\s+(?:có|đủ|chứa|đề\s+cập).*?(?:để\s+trả\s+lời|thông\s+tin|dữ\s+liệu)", re.IGNORECASE),
+]
+
+
+def _is_no_info_response(text):
+    """
+    Kiểm tra xem câu trả lời có phải là thông báo từ chối / không có thông tin trong tài liệu hay không.
+    Nếu là câu trả lời từ chối hoàn toàn, tuyệt đối không gắn nguồn trích dẫn và không lưu vào cache.
+    """
+    if not text:
+        return True
+
+    cite_split_pattern = re.compile(
+        r"(?:\n+---\s*)?\n*(?:📌\s*)?\*{0,2}Nguồn(?:\s+tài\s+liệu)?(?:\s+trích\s+dẫn|\s+tham\s+khảo)?\s*:?\*{0,2}\s*\n",
+        flags=re.IGNORECASE
+    )
+    body = cite_split_pattern.split(text, maxsplit=1)[0].strip()
+    body = re.sub(r"^\s*[-*•]?\s*📄\s*Trang\s+\d+\s*[-–—|]\s*File:.*$", "", body, flags=re.IGNORECASE | re.MULTILINE).strip()
+    body_lower = body.lower()
+
+    has_refusal = any(p in body_lower for p in REFUSAL_PHRASES) or any(rx.search(body_lower) for rx in REFUSAL_REGEX_PATTERNS)
+    if not has_refusal:
+        return False
+
+    paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+    first_para = paragraphs[0].lower() if paragraphs else body_lower
+    has_markdown_table = bool(re.search(r"^\|.+\|$", body, flags=re.MULTILINE))
+    bullet_lines = re.findall(r"^\s*[-*•+]\s+.+", body, flags=re.MULTILINE)
+
+    first_para_refusal = any(p in first_para for p in REFUSAL_PHRASES) or any(rx.search(first_para) for rx in REFUSAL_REGEX_PATTERNS)
+    if first_para_refusal and not has_markdown_table and len(bullet_lines) == 0:
+        return True
+
+    if len(body) < 680 and not has_markdown_table and len(bullet_lines) == 0:
+        return True
+
+    return False
+
+
+def ensure_answer_citations(text, ptit_docs=None, user_docs=None, effective_scope="ptit_only"):
+    """
+    Chuẩn hóa hoặc tự động bổ sung mục '📌 **Nguồn trích dẫn:**' ở cuối câu trả lời theo đúng Mẫu 1:
+    - 📄 Trang xx - File: yy (Tên văn bản)
+    Đồng thời trả về danh sách structured sources phục vụ giao diện.
+    Nếu câu trả lời là thông báo từ chối / chưa có thông tin, trả về nguyên văn không kèm trích dẫn.
+    """
+    if not text:
+        return "", []
+
+    ptit_docs = ptit_docs or []
+    user_docs = user_docs or []
+    user_filenames_lower = {
+        os.path.basename(d.get("filename", "")).lower(): os.path.basename(d.get("filename", ""))
+        for d in user_docs if d.get("filename")
+    }
+
+    cite_split_pattern = re.compile(
+        r"(?:\n+---\s*)?\n*(?:📌\s*)?\*{0,2}Nguồn(?:\s+tài\s+liệu)?(?:\s+trích\s+dẫn|\s+tham\s+khảo)?\s*:?\*{0,2}\s*\n",
+        flags=re.IGNORECASE
+    )
+
+    parts = cite_split_pattern.split(text, maxsplit=1)
+    body_text = parts[0].strip()
+    raw_cite_block = parts[1].strip() if len(parts) > 1 else ""
+
+    # Nếu câu trả lời là thông báo không có thông tin -> xóa bỏ mọi trích dẫn sai (nếu có) và trả về ngay
+    if _is_no_info_response(body_text):
+        clean_body = re.sub(r"(?:\n\s*---\s*)+\s*$", "", body_text.rstrip())
+        return clean_body, []
+
+    cited_items = []
+    seen_cite_keys = set()
+
+    def _add_citation(raw_file, page_num):
+        if not raw_file:
+            return
+        try:
+            p_int = max(1, int(page_num))
+        except Exception:
+            p_int = 1
+
+        clean_f = os.path.basename(str(raw_file).strip().strip("`*'\".,;)"))
+        stem_f = os.path.splitext(clean_f)[0].lower()
+
+        is_u_doc = False
+        if clean_f.lower() in user_filenames_lower:
+            is_u_doc = True
+            clean_f = user_filenames_lower[clean_f.lower()]
+        else:
+            for u_low, u_orig in user_filenames_lower.items():
+                if os.path.splitext(u_low)[0] == stem_f:
+                    is_u_doc = True
+                    clean_f = u_orig
+                    break
+
+        info = resolve_doc_display_info(clean_f, is_user_doc=is_u_doc)
+        key = (info["file"].lower(), p_int)
+        if key not in seen_cite_keys:
+            seen_cite_keys.add(key)
+            cited_items.append({
+                "file": info["file"],
+                "source": info["file"],
+                "md_file": info["md_file"],
+                "page": p_int,
+                "title": info["title"],
+                "is_user_doc": info["is_user_doc"],
+                "type": "USER_DOC" if info["is_user_doc"] else "PTIT_DOC"
+            })
+
+    # 1. Phân tích phần trích dẫn do LLM sinh ra (nếu có)
+    if raw_cite_block:
+        for line in raw_cite_block.splitlines():
+            line_s = line.strip()
+            if not line_s:
+                continue
+            # Mẫu chuẩn: Trang 3 - File: hp_2025.pdf (...) hoặc Trang 2, 3 - File: hp_2025.pdf
+            m1 = re.search(
+                r"Trang\s*([\d\s,; và-]+?)\s*[-–—|•,]\s*(?:File\s*:?\s*)?([A-Za-z0-9_.\-]+\.[A-Za-z0-9]+)",
+                line_s,
+                flags=re.IGNORECASE
+            )
+            if m1:
+                pages_str, fname = m1.group(1), m1.group(2)
+                for p_str in re.findall(r"\d+", pages_str):
+                    _add_citation(fname, int(p_str))
+                continue
+
+            # Mẫu đảo: File: hp_2025.pdf - Trang 3 hoặc hp_2025.pdf (Trang 3)
+            m2 = re.search(
+                r"([A-Za-z0-9_.\-]+\.(?:pdf|md|docx|txt))\b.*?Trang\s*([\d\s,;-]+)",
+                line_s,
+                flags=re.IGNORECASE
+            )
+            if m2:
+                fname, pages_str = m2.group(1), m2.group(2)
+                for p_str in re.findall(r"\d+", pages_str):
+                    _add_citation(fname, int(p_str))
+
+    # 2. Nếu LLM quên sinh trích dẫn hoặc dùng chế độ Fallback -> Tự động lấy từ tài liệu thực sự khớp nội dung
+    has_refusal_hint = _is_no_info_response(body_text) or any(p in body_text.lower() for p in REFUSAL_PHRASES)
+    if not cited_items and not has_refusal_hint:
+        if effective_scope in ("user_only", "hybrid") and user_docs:
+            direct_u = [d for d in user_docs if d.get("is_direct_match")]
+            chosen_u = direct_u[:2] if direct_u else (user_docs[:1] if effective_scope == "user_only" else [])
+            for d in chosen_u:
+                _add_citation(d.get("filename"), d.get("page", 1))
+
+        if effective_scope in ("ptit_only", "hybrid") and ptit_docs:
+            body_lower = body_text.lower()
+            a_words = set(re.findall(r"\w{3,}", body_lower)) - GENERIC_PTIT_WORDS
+            scored_ptit = []
+            for d in ptit_docs:
+                d_words = set(re.findall(r"\w{3,}", (d.get("content") or "").lower())) - GENERIC_PTIT_WORDS
+                overlap = len(d_words & a_words)
+                if overlap >= 3:
+                    scored_ptit.append((overlap, d))
+            scored_ptit.sort(key=lambda x: x[0], reverse=True)
+            chosen_p = [item[1] for item in scored_ptit[:2]]
+            if not chosen_p and ptit_docs and "thông tin tìm thấy trong tài liệu chính thức" in body_lower:
+                chosen_p = ptit_docs[:1]
+            for d in chosen_p:
+                _add_citation(d.get("source"), d.get("page", 1))
+
+    if not cited_items:
+        clean_body = re.sub(r"(?:\n\s*---\s*)+\s*$", "", body_text.rstrip())
+        return clean_body, []
+
+    cite_lines = [
+        f"- 📄 Trang {item['page']} - File: {item['file']} ({item['title']})"
+        for item in cited_items
+    ]
+    clean_body = re.sub(r"(?:\n\s*---\s*)+\s*$", "", body_text.rstrip())
+    formatted_cite_section = "\n\n---\n📌 **Nguồn trích dẫn:**\n" + "\n".join(cite_lines)
+    final_text = clean_body + formatted_cite_section
+    return final_text, cited_items
+
+
 def safe_fallback_answer(question, docs):
     """
     Bộ dự phòng an toàn khi mất kết nối AI hoàn toàn:
@@ -1198,8 +1624,20 @@ def safe_fallback_answer(question, docs):
     if not docs:
         return "Hiện chưa tìm thấy thông tin phù hợp trong tài liệu của Học viện. Bạn vui lòng liên hệ phòng Công tác sinh viên hoặc phòng ban liên quan để được hỗ trợ trực tiếp."
 
-    q_lower = question.lower()
-    q_words = [w for w in re.findall(r"\w+", q_lower) if len(w) > 1]
+    q_lower = normalize_academic_query(question).lower()
+    q_words = [w for w in re.findall(r"\w+", q_lower) if len(w) > 1 and w not in GENERIC_PTIT_WORDS]
+
+    # 0. Nếu hỏi về điều kiện / tiêu chuẩn xét cấp học bổng khuyến khích học tập hoặc GPA & Điểm rèn luyện
+    if any(k in q_lower for k in ["học bổng", "hoc bong", "khuyến khích", "gpa", "tbcmr", "rèn luyện", "loại giỏi", "loại xuất sắc", "loại khá"]) and any("hb_" in (d.get("source") or "").lower() for d in docs):
+        return (
+            "Theo **Bảng kết quả xét cấp học bổng khuyến khích học tập (HB KKHT) học kỳ 1 năm học 2025-2026** (`HB_HK1_25-26.pdf`) và **Sổ tay Sinh viên** (`so_tay.pdf`), điều kiện và tiêu chuẩn xét cấp học bổng khuyến khích học tập tại PTIT bao gồm:\n\n"
+            "- **1. Hai tiêu chí đánh giá bắt buộc:** Sinh viên phải đạt đồng thời mức điểm chuẩn về **Điểm trung bình chung mở rộng (Điểm TBCMR - thang điểm 4)** và **Điểm rèn luyện (Điểm RL - thang điểm 100)** của học kỳ xét cấp theo quy định riêng cho từng ngành, từng khóa tại Cơ sở Hà Nội (HN) hoặc Cơ sở TP. Hồ Chí Minh (HCM) trong phạm vi quỹ học bổng.\n"
+            "- **2. Tiêu chuẩn điểm chuẩn theo 3 loại học bổng:**\n"
+            "  + **Học bổng loại Xuất sắc:** Điểm rèn luyện đạt từ **90 điểm trở lên** và Điểm TBCMR đạt từ **3,60 trở lên** (một số ngành/khóa có mức điểm chuẩn TBCMR từ 3,60 đến 3,76).\n"
+            "  + **Học bổng loại Giỏi:** Điểm rèn luyện đạt từ **80 điểm trở lên** (tùy ngành/khóa từ 80 - 90 điểm) và Điểm TBCMR đạt tối thiểu từ **3,20 trở lên** (điểm chuẩn thực tế dao động từ 3,20 đến 3,92 tùy ngành, khóa).\n"
+            "  + **Học bổng loại Khá:** Điểm rèn luyện đạt từ **65 điểm trở lên** (tùy ngành/khóa từ 65 - 88 điểm) và Điểm TBCMR đạt tối thiểu từ **2,50 trở lên** (áp dụng tại các ngành/khóa còn chỉ tiêu quỹ học bổng sau khi xét loại Xuất sắc và Giỏi).\n"
+            "- **3. Quy định về điểm học cải thiện (Điều 6, Khoản 2.2 - Sổ tay sinh viên):** Kết quả học cải thiện điểm chỉ sử dụng để tính điểm trung bình chung tích lũy, **không sử dụng để xét khen thưởng, học bổng**."
+        )
 
     # 1. Nếu là mẫu đơn hành chính chuẩn (đơn xin vắng thi, nghỉ học...)
     for d in docs:
@@ -1510,6 +1948,7 @@ def speech_to_text():
             mime_type=mime_type,
             api_key=custom_api_key or API_KEY
         )
+        transcript = normalize_academic_query(transcript)
         return jsonify({"status": "success", "transcript": transcript})
     except Exception as e:
         print(f"[!] STT Error: {e}")
@@ -1537,21 +1976,23 @@ def _get_response_cache_key(question, effective_scope, user_files, history):
     return (q_norm, effective_scope, files_sig)
 
 
-def _store_response_cache(cache_key, clean_answer, model_used, referenced_files):
-    """Lưu câu trả lời chuẩn vào bộ nhớ đệm LRU trong RAM."""
-    if not cache_key or not clean_answer:
+def _store_response_cache(cache_key, clean_answer, model_used, referenced_files, sources=None):
+    """Lưu câu trả lời chuẩn vào bộ nhớ đệm LRU trong RAM (không lưu câu trả lời từ chối / không có thông tin)."""
+    if not cache_key or not clean_answer or _is_no_info_response(clean_answer):
         return
     if len(_RESPONSE_CACHE) >= MAX_RESPONSE_CACHE_SIZE:
         _RESPONSE_CACHE.pop(next(iter(_RESPONSE_CACHE)), None)
     _RESPONSE_CACHE[cache_key] = {
         "answer": clean_answer,
         "model_used": model_used,
-        "referenced_files": list(referenced_files or [])
+        "referenced_files": list(referenced_files or []),
+        "sources": list(sources or [])
     }
 
 
-def _retrieve_rag_context(question, session_id, scope, top_k, custom_api_key, user_files=None):
-    """Thực thi truy vấn ngữ cảnh RAG tối ưu (hỗ trợ Fast-Path RAM & Parallel Hybrid)."""
+def _retrieve_rag_context(question, session_id, scope, top_k, custom_api_key, user_files=None, history=None):
+    """Thực thi truy vấn ngữ cảnh RAG tối ưu (hỗ trợ Fast-Path RAM, kế thừa ngữ cảnh hội thoại & Parallel Hybrid)."""
+    question = normalize_academic_query(question)
     if user_files is None:
         user_files = get_session_uploaded_files(session_id) if session_id else []
     has_user_files = len(user_files) > 0
@@ -1572,11 +2013,27 @@ def _retrieve_rag_context(question, session_id, scope, top_k, custom_api_key, us
     ptit_search_query = question
     if has_user_files and is_referential and user_topics:
         ptit_search_query = f"{question} {' '.join(user_topics)}"
+    elif history and isinstance(history, list) and len(history) > 0:
+        # Nếu câu hỏi hiện tại ngắn hoặc nối tiếp hội thoại trước đó mà chưa nêu rõ chủ đề chính (học bổng, học phí, ký túc xá, miễn giảm...),
+        # tự động bổ sung từ khóa chủ đề từ câu hỏi/trả lời liền trước để tìm kiếm RAG không bị lệch hướng.
+        explicit_topics = [
+            "học bổng", "học phí", "ký túc xá", "ktx", "miễn giảm", "miễn học", "miễn thi",
+            "quy đổi", "tiếng anh", "ielts", "toeic", "thạc sĩ", "giảng viên", "câu lạc bộ", "clb"
+        ]
+        if not any(t in q_lower for t in explicit_topics):
+            recent_text = " ".join(
+                (h.get("content") or "")[:300].lower()
+                for h in history[-3:]
+                if isinstance(h, dict) and h.get("content")
+            )
+            carried_topics = [t for t in explicit_topics if t in recent_text]
+            if carried_topics:
+                ptit_search_query = f"{question} {' '.join(carried_topics[:2])}"
 
     if effective_scope == "user_only":
         user_docs = query_user_documents(question, session_id, n_results=top_k, custom_api_key=custom_api_key)
     elif effective_scope == "ptit_only":
-        ptit_docs = smart_query_knowledge_base(question, n_results=top_k, custom_api_key=custom_api_key)
+        ptit_docs = smart_query_knowledge_base(ptit_search_query, n_results=top_k, custom_api_key=custom_api_key)
     else:
         active_key = custom_api_key if custom_api_key else API_KEY
         if ptit_search_query == question:
@@ -1608,11 +2065,19 @@ def _retrieve_rag_context(question, session_id, scope, top_k, custom_api_key, us
 
     context_sections = []
     if user_docs:
-        u_parts = [f"--- [{d['filename']} - Trang {d['page']}] ---\n{d['content']}" for d in user_docs]
+        u_parts = [
+            f"--- [TÀI LIỆU TẢI LÊN | File: {d['filename']} (Tài liệu người dùng tải lên) | Trang {d['page']}] ---\n{d['content']}"
+            for d in user_docs
+        ]
         context_sections.append("=== [TÀI LIỆU DO NGƯỜI DÙNG TẢI LÊN] ===\n" + "\n\n".join(u_parts))
 
     if ptit_docs:
-        p_parts = [f"--- [TÀI LIỆU PTIT {i}] ---\n{d['content']}" for i, d in enumerate(ptit_docs, start=1)]
+        p_parts = []
+        for i, d in enumerate(ptit_docs, start=1):
+            info = resolve_doc_display_info(d.get("source"), is_user_doc=False)
+            p_parts.append(
+                f"--- [TÀI LIỆU PTIT {i} | File: {info['file']} ({info['title']}) | Trang {d.get('page', 1)}] ---\n{d['content']}"
+            )
         context_sections.append("=== [CƠ SỞ DỮ LIỆU CHÍNH THỨC PTIT] ===\n" + "\n\n".join(p_parts))
 
     context_str = "\n\n".join(context_sections) if context_sections else "Không tìm thấy dữ liệu trực tiếp."
@@ -1621,6 +2086,8 @@ def _retrieve_rag_context(question, session_id, scope, top_k, custom_api_key, us
 
 def _resolve_referenced_files(user_docs, user_files, clean_answer, effective_scope, is_referential):
     """Xác định chính xác danh sách tài liệu người dùng thực sự được tham chiếu trong câu trả lời."""
+    if clean_answer and _is_no_info_response(clean_answer):
+        return []
     referenced_files = []
     if user_docs:
         direct_matched_files = list(dict.fromkeys(
@@ -1638,6 +2105,223 @@ def _resolve_referenced_files(user_docs, user_files, clean_answer, effective_sco
         else:
             referenced_files = list(dict.fromkeys(direct_matched_files + mentioned_files))
     return referenced_files
+
+
+def _locate_document_path(raw_file, session_id=None):
+    """
+    Xác định đường dẫn thực tế của tài liệu trên đĩa (chống Path Traversal):
+    - Ưu tiên 1: Tài liệu người dùng tải lên trong user_uploads/{session_id}/
+    - Ưu tiên 2: Tài liệu PDF gốc của Học viện trong data/
+    - Ưu tiên 3: Tài liệu Markdown trong processed_data/
+    """
+    if not raw_file:
+        return None, None, False
+    safe_name = os.path.basename(str(raw_file).strip())
+    if not safe_name:
+        return None, None, False
+
+    if session_id:
+        safe_sess = os.path.basename(str(session_id).strip())
+        user_path = os.path.join(USER_UPLOADS_DIR, safe_sess, safe_name)
+        if os.path.isfile(user_path):
+            return user_path, safe_name, True
+
+    info = resolve_doc_display_info(safe_name, is_user_doc=False)
+    pdf_candidate = os.path.join(DATA_DIR, info["file"])
+    if os.path.isfile(pdf_candidate):
+        return pdf_candidate, info["file"], False
+
+    direct_data_path = os.path.join(DATA_DIR, safe_name)
+    if os.path.isfile(direct_data_path):
+        return direct_data_path, safe_name, False
+
+    if info.get("md_file"):
+        md_candidate = os.path.join(PROCESSED_DIR, info["md_file"])
+        if os.path.isfile(md_candidate):
+            return md_candidate, info["md_file"], False
+
+    return None, None, False
+
+
+@app.route("/api/view-file", methods=["GET"])
+def view_file():
+    """Phục vụ xem trực tiếp file PDF / tài liệu gốc trên trình duyệt (hỗ trợ nhảy trang #page=xx)."""
+    raw_file = (request.args.get("file") or "").strip()
+    session_id = (request.args.get("session_id") or "").strip()
+
+    target_path, resolved_name, _ = _locate_document_path(raw_file, session_id=session_id)
+    if not target_path or not os.path.isfile(target_path):
+        return jsonify({"error": f"Không tìm thấy file '{raw_file}'."}), 404
+
+    ext = os.path.splitext(resolved_name)[1].lower()
+    mime_map = {
+        ".pdf": "application/pdf",
+        ".txt": "text/plain; charset=utf-8",
+        ".md": "text/plain; charset=utf-8",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+    mimetype = mime_map.get(ext, "application/octet-stream")
+    as_attach = ext == ".docx"
+
+    response = send_file(
+        target_path,
+        mimetype=mimetype,
+        as_attachment=as_attach,
+        download_name=resolved_name,
+        conditional=True
+    )
+    if not as_attach:
+        encoded_name = quote(resolved_name)
+        response.headers["Content-Disposition"] = f"inline; filename=\"{encoded_name}\"; filename*=UTF-8''{encoded_name}"
+    return response
+
+
+@app.route("/api/render-pdf-page", methods=["GET"])
+def render_pdf_page():
+    """Kết xuất chính xác trang xx của file PDF thành hình ảnh PNG sắc nét bằng PyMuPDF."""
+    raw_file = (request.args.get("file") or "").strip()
+    session_id = (request.args.get("session_id") or "").strip()
+    try:
+        page_num = max(1, int(request.args.get("page") or 1))
+    except Exception:
+        page_num = 1
+    try:
+        dpi = min(220, max(96, int(request.args.get("dpi") or 150)))
+    except Exception:
+        dpi = 150
+
+    target_path, resolved_name, _ = _locate_document_path(raw_file, session_id=session_id)
+    if not target_path or not resolved_name.lower().endswith(".pdf"):
+        return jsonify({"error": "Chỉ hỗ trợ kết xuất hình ảnh trang cho định dạng PDF."}), 404
+
+    try:
+        import pymupdf
+        doc = pymupdf.open(target_path)
+        total_pages = len(doc)
+        clamped_page = min(max(1, page_num), total_pages)
+        page = doc[clamped_page - 1]
+        pix = page.get_pixmap(dpi=dpi)
+        img_bytes = pix.tobytes("png")
+        doc.close()
+
+        resp = Response(img_bytes, mimetype="image/png")
+        resp.headers["Cache-Control"] = "public, max-age=3600"
+        resp.headers["X-Total-Pages"] = str(total_pages)
+        resp.headers["X-Current-Page"] = str(clamped_page)
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"Lỗi kết xuất trang PDF: {str(e)}"}), 500
+
+
+@app.route("/api/view-page-detail", methods=["GET"])
+def view_page_detail():
+    """
+    Trả về thông tin chi tiết của Trang xx thuộc File yy:
+    - Đường dẫn xem PDF gốc (#page=xx)
+    - Đường dẫn ảnh chụp chính xác Trang xx
+    - Nội dung văn bản Markdown trích xuất của đúng Trang xx
+    - Tổng số trang của tài liệu
+    """
+    raw_file = (request.args.get("file") or "").strip()
+    session_id = (request.args.get("session_id") or "").strip()
+    try:
+        page_num = max(1, int(request.args.get("page") or 1))
+    except Exception:
+        page_num = 1
+
+    target_path, resolved_name, is_user_doc = _locate_document_path(raw_file, session_id=session_id)
+    if not target_path:
+        return jsonify({"error": f"Không tìm thấy tài liệu '{raw_file}'."}), 404
+
+    info = resolve_doc_display_info(resolved_name, is_user_doc=is_user_doc)
+    is_pdf = resolved_name.lower().endswith(".pdf")
+    total_pages = 1
+    text_content = ""
+
+    if is_user_doc:
+        safe_sess = os.path.basename(session_id)
+        session_dir = os.path.join(USER_UPLOADS_DIR, safe_sess)
+        ext_json = _find_extracted_json_path(session_dir, resolved_name)
+        if os.path.exists(ext_json):
+            try:
+                with open(ext_json, "r", encoding="utf-8") as f:
+                    d_ext = json.load(f)
+                chunks = d_ext.get("chunks", [])
+                if chunks:
+                    total_pages = max((int(c.get("page", 1)) for c in chunks), default=1)
+                    page_chunks = [c.get("text", "") for c in chunks if int(c.get("page", 1)) == page_num]
+                    if not page_chunks and page_num > total_pages:
+                        page_num = total_pages
+                        page_chunks = [c.get("text", "") for c in chunks if int(c.get("page", 1)) == page_num]
+                    text_content = "\n\n".join(page_chunks).strip()
+            except Exception:
+                pass
+        if is_pdf:
+            try:
+                import pymupdf
+                doc = pymupdf.open(target_path)
+                total_pages = len(doc)
+                doc.close()
+            except Exception:
+                pass
+    else:
+        ensure_processed_docs_in_ram()
+        md_name = info.get("md_file") or f"{os.path.splitext(resolved_name)[0]}.md"
+        doc_pages = [p for (fn, p) in _RAM_PAGE_LOOKUP.keys() if fn.lower() == md_name.lower()]
+        if doc_pages:
+            total_pages = max(doc_pages)
+        if is_pdf and os.path.isfile(target_path):
+            try:
+                import pymupdf
+                doc = pymupdf.open(target_path)
+                total_pages = max(total_pages, len(doc))
+                doc.close()
+            except Exception:
+                pass
+        clamped_page = min(max(1, page_num), total_pages)
+        page_num = clamped_page
+        text_content = _RAM_PAGE_LOOKUP.get((md_name, page_num), "")
+        if not text_content:
+            for (fn, p), body in _RAM_PAGE_LOOKUP.items():
+                if fn.lower() == md_name.lower() and p == page_num:
+                    text_content = body
+                    break
+        if not text_content:
+            text_content = _RAM_FULL_DOC_LOOKUP.get(md_name, "")
+
+    q_sess = f"&session_id={quote(session_id)}" if (is_user_doc and session_id) else ""
+    file_url = f"/api/view-file?file={quote(resolved_name)}{q_sess}"
+    page_image_url = f"/api/render-pdf-page?file={quote(resolved_name)}&page={page_num}{q_sess}" if is_pdf else None
+
+    return jsonify({
+        "file": resolved_name,
+        "title": info["title"],
+        "page": page_num,
+        "total_pages": total_pages,
+        "is_pdf": is_pdf,
+        "is_user_doc": is_user_doc,
+        "file_url": file_url,
+        "page_image_url": page_image_url,
+        "text_content": text_content or "*(Trang này là hình ảnh scan hoặc không có lớp văn bản tách rời — vui lòng xem bên tab Trang Tài Liệu PDF)*"
+    })
+
+
+@app.route("/api/sources", methods=["GET"])
+def list_sources():
+    """Trả về danh mục tài liệu chính thức trong Cơ sở tri thức PTIT."""
+    catalog = []
+    for key, meta in PTIT_DOC_METADATA.items():
+        pdf_path = os.path.join(DATA_DIR, meta["pdf_file"])
+        size_kb = round(os.path.getsize(pdf_path) / 1024, 1) if os.path.isfile(pdf_path) else 0
+        size_str = f"{round(size_kb / 1024, 2)} MB" if size_kb >= 1024 else f"{size_kb} KB"
+        catalog.append({
+            "name": meta["pdf_file"],
+            "title": meta["title"],
+            "category": meta["category"],
+            "desc": f"Văn bản chính thức của Học viện Công nghệ Bưu chính Viễn thông ({meta['pdf_file']}).",
+            "file_size": size_str
+        })
+    return jsonify({"catalog": catalog})
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -1668,11 +2352,11 @@ def chat():
             "scope_used": effective_scope,
             "referenced_files": cached["referenced_files"],
             "cached": True,
-            "sources": []
+            "sources": cached.get("sources", [])
         })
 
     context_str, effective_scope, user_files, user_docs, ptit_docs, is_referential = _retrieve_rag_context(
-        question, session_id, scope, top_k, custom_api_key, user_files=user_files
+        question, session_id, scope, top_k, custom_api_key, user_files=user_files, history=history
     )
 
     answer, model_used, error_msg = generate_llm_answer(
@@ -1694,17 +2378,20 @@ def chat():
         is_fallback = True
 
     clean_answer = clean_llm_response(answer)
+    clean_answer, sources_list = ensure_answer_citations(
+        clean_answer, ptit_docs=ptit_docs, user_docs=user_docs, effective_scope=effective_scope
+    )
     referenced_files = _resolve_referenced_files(user_docs, user_files, clean_answer, effective_scope, is_referential)
 
     if not is_fallback and cache_key:
-        _store_response_cache(cache_key, clean_answer, model_used, referenced_files)
+        _store_response_cache(cache_key, clean_answer, model_used, referenced_files, sources=sources_list)
 
     return jsonify({
         "answer": clean_answer,
         "model_used": model_used,
         "scope_used": effective_scope,
         "referenced_files": referenced_files,
-        "sources": []
+        "sources": sources_list
     })
 
 
@@ -1735,14 +2422,14 @@ def chat_stream():
         cache_key = _get_response_cache_key(question, effective_scope, user_files, history)
         if cache_key and cache_key in _RESPONSE_CACHE:
             cached = _RESPONSE_CACHE[cache_key]
-            yield f"data: {json.dumps({'type': 'meta', 'scope_used': effective_scope, 'referenced_files': cached['referenced_files']}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'meta', 'scope_used': effective_scope, 'referenced_files': cached['referenced_files'], 'sources': cached.get('sources', [])}, ensure_ascii=False)}\n\n"
             yield f"data: {json.dumps({'type': 'chunk', 'delta': cached['answer']}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'done', 'answer': cached['answer'], 'model_used': cached['model_used'] + ' (Cache)', 'scope_used': effective_scope, 'referenced_files': cached['referenced_files'], 'cached': True}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'answer': cached['answer'], 'model_used': cached['model_used'] + ' (Cache)', 'scope_used': effective_scope, 'referenced_files': cached['referenced_files'], 'sources': cached.get('sources', []), 'cached': True}, ensure_ascii=False)}\n\n"
             return
 
         # 2. Truy xuất ngữ cảnh RAG siêu tốc (RAM Keyword + Vector)
         context_str, effective_scope, user_files, user_docs, ptit_docs, is_referential = _retrieve_rag_context(
-            question, session_id, scope, top_k, custom_api_key
+            question, session_id, scope, top_k, custom_api_key, user_files=user_files, history=history
         )
         initial_refs = _resolve_referenced_files(user_docs, user_files, "", effective_scope, is_referential)
         yield f"data: {json.dumps({'type': 'meta', 'scope_used': effective_scope, 'referenced_files': initial_refs}, ensure_ascii=False)}\n\n"
@@ -1784,12 +2471,15 @@ def chat_stream():
             yield f"data: {json.dumps({'type': 'chunk', 'delta': raw_full}, ensure_ascii=False)}\n\n"
 
         clean_answer = clean_llm_response(raw_full)
+        clean_answer, sources_list = ensure_answer_citations(
+            clean_answer, ptit_docs=ptit_docs, user_docs=user_docs, effective_scope=effective_scope
+        )
         final_refs = _resolve_referenced_files(user_docs, user_files, clean_answer, effective_scope, is_referential)
 
         if not is_fallback and cache_key:
-            _store_response_cache(cache_key, clean_answer, model_used, final_refs)
+            _store_response_cache(cache_key, clean_answer, model_used, final_refs, sources=sources_list)
 
-        yield f"data: {json.dumps({'type': 'done', 'answer': clean_answer, 'model_used': model_used, 'scope_used': effective_scope, 'referenced_files': final_refs}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'answer': clean_answer, 'model_used': model_used, 'scope_used': effective_scope, 'referenced_files': final_refs, 'sources': sources_list}, ensure_ascii=False)}\n\n"
 
     headers = {
         "Cache-Control": "no-cache",

@@ -27,7 +27,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/style.css?v=19">
+    <link rel="stylesheet" href="/static/css/style.css?v=26">
 </head>
 
 <body>
@@ -508,29 +508,41 @@
         </div>
     </div>
 
-    <!-- MODAL: SOURCE DETAIL VIEWER -->
+    <!-- MODAL: SOURCE DETAIL & DOCUMENT PAGE VIEWER -->
     <div class="modal-backdrop" id="sourceModal">
-        <div class="modal-content modal-lg">
-            <div class="modal-header">
+        <div class="modal-content modal-xl source-viewer-modal">
+            <div class="modal-header source-modal-header">
                 <div class="modal-title-group">
-                    <div class="modal-icon"><i class="fa-solid fa-file-lines"></i></div>
+                    <div class="modal-icon" id="sourceModalIcon"><i class="fa-solid fa-file-pdf"></i></div>
                     <div>
-                        <h3 class="modal-title" id="sourceModalTitle">Chi Tiết Đoạn Trích Dẫn Gốc</h3>
-                        <p class="modal-subtitle" id="sourceModalSubtitle">Đối chiếu nội dung trong cơ sở tri thức PTIT
-                        </p>
+                        <h3 class="modal-title" id="sourceModalTitle">Chi Tiết Tài Liệu Trích Dẫn</h3>
+                        <p class="modal-subtitle" id="sourceModalSubtitle">Đối chiếu trực tiếp trang tài liệu gốc</p>
                     </div>
                 </div>
-                <button class="icon-btn" id="closeSourceModalBtn"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="modal-body">
-                <div class="source-inspect-box">
-                    <pre><code id="sourceModalContent"></code></pre>
+
+                <!-- Nút thao tác trên Header: Mở file PDF ở tab mới & Đóng X -->
+                <div class="source-modal-top-actions">
+                    <a href="#" target="_blank" rel="noopener" class="source-open-newtab-btn" id="openSourceNewTabBtn"
+                        title="Mở file PDF ở tab mới">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                        <span id="openSourceNewTabText">Mở file PDF ở tab mới (Trang 1)</span>
+                    </a>
+                    <button class="source-top-btn source-close-btn" id="closeSourceModalBtn" title="Đóng (Esc)"><i
+                            class="fa-solid fa-xmark"></i></button>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="copySourceContentBtn"><i class="fa-regular fa-copy"></i> Sao chép
-                    trích dẫn</button>
-                <button class="btn btn-primary" id="closeSourceModalFooterBtn">Đóng</button>
+            <div class="modal-body source-modal-body">
+                <!-- NATIVE PDF VIEWER AT #page=xx -->
+                <div class="source-view-pane active" id="sourcePdfPane">
+                    <iframe id="sourcePdfFrame" class="source-pdf-iframe"
+                        title="Trình xem tài liệu PDF theo trang"></iframe>
+                </div>
+                <!-- FALLBACK CHO TÀI LIỆU VĂN BẢN KHÔNG PHẢI PDF (.txt, .md, .docx) -->
+                <div class="source-view-pane" id="sourceTextPane">
+                    <div class="source-inspect-box">
+                        <pre><code id="sourceModalContent"></code></pre>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -575,7 +587,7 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- APP JAVASCRIPT -->
-    <script src="/static/js/app.js?v=25"></script>
+    <script src="/static/js/app.js?v=33"></script>
 </body>
 
 </html>

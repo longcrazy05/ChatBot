@@ -199,12 +199,37 @@ class PTITChatApp {
         this.currentVoiceNameDisplay = document.getElementById("currentVoiceNameDisplay");
 
         this.sourceModal = document.getElementById("sourceModal");
+        this.sourceModalIcon = document.getElementById("sourceModalIcon");
         this.sourceModalTitle = document.getElementById("sourceModalTitle");
         this.sourceModalSubtitle = document.getElementById("sourceModalSubtitle");
         this.sourceModalContent = document.getElementById("sourceModalContent");
+        this.sourcePageNav = document.getElementById("sourcePageNav");
+        this.sourcePrevPageBtn = document.getElementById("sourcePrevPageBtn");
+        this.sourceNextPageBtn = document.getElementById("sourceNextPageBtn");
+        this.sourcePageIndicator = document.getElementById("sourcePageIndicator");
+        this.sourceViewTabs = document.getElementById("sourceViewTabs");
+        this.sourceTabPdfBtn = document.getElementById("sourceTabPdfBtn");
+        this.sourceTabImageBtn = document.getElementById("sourceTabImageBtn");
+        this.sourceTabTextBtn = document.getElementById("sourceTabTextBtn");
+        this.sourcePdfPane = document.getElementById("sourcePdfPane");
+        this.sourceImagePane = document.getElementById("sourceImagePane");
+        this.sourceTextPane = document.getElementById("sourceTextPane");
+        this.sourcePdfFrame = document.getElementById("sourcePdfFrame");
+        this.sourcePageImage = document.getElementById("sourcePageImage");
+        this.openSourceNewTabBtn = document.getElementById("openSourceNewTabBtn");
+        this.openSourceNewTabText = document.getElementById("openSourceNewTabText");
+        this.toggleSourceModalFullscreenBtn = document.getElementById("toggleSourceModalFullscreenBtn");
         this.closeSourceModalBtn = document.getElementById("closeSourceModalBtn");
         this.closeSourceModalFooterBtn = document.getElementById("closeSourceModalFooterBtn");
         this.copySourceContentBtn = document.getElementById("copySourceContentBtn");
+        this.currentSourceViewer = {
+            file: "",
+            title: "",
+            page: 1,
+            totalPages: 1,
+            isPdf: true,
+            activeTab: "pdf"
+        };
 
         this.toastContainer = document.getElementById("toastContainer");
     }
@@ -280,12 +305,35 @@ class PTITChatApp {
             });
         }
 
-        if (this.closeSourceModalBtn) this.closeSourceModalBtn.addEventListener("click", () => this.sourceModal && this.sourceModal.classList.remove("active"));
-        if (this.closeSourceModalFooterBtn) this.closeSourceModalFooterBtn.addEventListener("click", () => this.sourceModal && this.sourceModal.classList.remove("active"));
+        if (this.closeSourceModalBtn) this.closeSourceModalBtn.addEventListener("click", () => this.closeSourceModal());
+        if (this.closeSourceModalFooterBtn) this.closeSourceModalFooterBtn.addEventListener("click", () => this.closeSourceModal());
+        if (this.toggleSourceModalFullscreenBtn) {
+            this.toggleSourceModalFullscreenBtn.addEventListener("click", () => this.toggleSourceModalFullscreen());
+        }
+        if (this.sourcePrevPageBtn) {
+            this.sourcePrevPageBtn.addEventListener("click", () => {
+                if (this.currentSourceViewer && this.currentSourceViewer.page > 1) {
+                    this.loadCitationPage(this.currentSourceViewer.page - 1);
+                }
+            });
+        }
+        if (this.sourceNextPageBtn) {
+            this.sourceNextPageBtn.addEventListener("click", () => {
+                if (this.currentSourceViewer && this.currentSourceViewer.page < this.currentSourceViewer.totalPages) {
+                    this.loadCitationPage(this.currentSourceViewer.page + 1);
+                }
+            });
+        }
+        [this.sourceTabPdfBtn, this.sourceTabImageBtn, this.sourceTabTextBtn].filter(Boolean).forEach(btn => {
+            btn.addEventListener("click", () => {
+                const tab = btn.getAttribute("data-tab") || "pdf";
+                this.switchSourceModalTab(tab);
+            });
+        });
         if (this.copySourceContentBtn) {
             this.copySourceContentBtn.addEventListener("click", () => {
                 navigator.clipboard.writeText(this.sourceModalContent ? this.sourceModalContent.textContent : "").then(() => {
-                    this.showToast("Đã sao chép nội dung!", "success");
+                    this.showToast("Đã sao chép nội dung trang!", "success");
                 });
             });
         }
@@ -305,7 +353,13 @@ class PTITChatApp {
         // Close modals on backdrop click
         [this.kbModal, this.settingsModal, this.sourceModal].filter(Boolean).forEach(modal => {
             modal.addEventListener("click", (e) => {
-                if (e.target === modal) modal.classList.remove("active");
+                if (e.target === modal) {
+                    if (modal === this.sourceModal) {
+                        this.closeSourceModal();
+                    } else {
+                        modal.classList.remove("active");
+                    }
+                }
             });
         });
         this.initQuickModelSelector();
@@ -773,9 +827,32 @@ class PTITChatApp {
         this.scrollToBottom();
     }
 
+    normalizeVoiceTranscript(text) {
+        if (!text) return "";
+        return text
+            .replace(/\b(?:gba|g\.p\.a|g\s+p\s+a|ji\s*pi\s*ay)\b/gi, "GPA")
+            .replace(/\b(?:pê\s*tít|pê\s*tit|pờ\s*tít)\b/gi, "PTIT")
+            .trim();
+    }
+
+    isRefusalBotAnswer(rawText) {
+        if (!rawText) return false;
+        const splitIdx = rawText.search(/(?:\n+---\s*)?\n*(?:📌\s*)?\*{0,2}Nguồn(?:\s+tài\s+liệu)?(?:\s+trích\s+dẫn|\s+tham\s+khảo)?/i);
+        const body = (splitIdx >= 0 ? rawText.slice(0, splitIdx) : rawText).trim();
+        const refusalRx = /(?:chưa|không)\s+(?:có|chứa|tìm\s+thấy|được\s+cung\s+cấp|đề\s+cập)(?:\s+đầy\s+đủ|\s+đủ|\s+chi\s+tiết|\s+cụ\s+thể)*\s*(?:thông\s+tin|dữ\s+liệu)|tài\s+liệu.*?(?:chưa|không)\s+(?:có|đủ|chứa|đề\s+cập).*?(?:để\s+trả\s+lời|thông\s+tin|dữ\s+liệu)/i;
+        if (!refusalRx.test(body)) return false;
+        const hasTable = /^\|.+\|$/m.test(body);
+        const hasBullets = /^\s*[-*•+]\s+.+/m.test(body);
+        return !hasTable && !hasBullets;
+    }
+
     renderBotMarkdownIntoBubble(bubbleDiv, rawContent, isFinal = true) {
         if (!bubbleDiv) return;
         let textToRender = rawContent || "";
+        // Nếu câu trả lời là thông báo từ chối / chưa có thông tin, loại bỏ ngay mọi khối trích dẫn thừa
+        if (this.isRefusalBotAnswer(textToRender)) {
+            textToRender = textToRender.replace(/(?:\n+\s*---\s*)?\n*(?:📌\s*)?\*{0,2}Nguồn(?:\s+tài\s+liệu)?(?:\s+trích\s+dẫn|\s+tham\s+khảo)?[\s\S]*$/i, "").trim();
+        }
         textToRender = textToRender.replace(/\$\s*\\ge(q)?\s*([^$]+)\$/g, "từ $2 trở lên");
         textToRender = textToRender.replace(/\$\s*\\le(q)?\s*([^$]+)\$/g, "dưới hoặc bằng $2");
         textToRender = textToRender.replace(/\$\s*\\ge(q)?\s*\$/g, "từ ");
@@ -826,11 +903,13 @@ class PTITChatApp {
                 if (headers.length > 0) {
                     const firstHeader = headers[0].textContent.trim().toUpperCase();
                     if (firstHeader === "STT" || firstHeader === "TT") {
+                        headers[0].style.textAlign = "center";
                         let sttCounter = 1;
                         table.querySelectorAll("tbody tr").forEach(row => {
                             const cells = Array.from(row.querySelectorAll("td"));
                             if (cells.length > 0) {
                                 cells[0].textContent = sttCounter++;
+                                cells[0].classList.add("col-stt");
                                 cells[0].style.textAlign = "center";
                                 cells[0].style.fontWeight = "600";
                             }
@@ -839,20 +918,103 @@ class PTITChatApp {
                 }
             }
 
-            // Căn chỉnh số tiền và đơn vị, tuyệt đối không ngắt dòng số hoặc đơn vị
+            // Căn chỉnh thông minh theo nội dung ô: chỉ nowrap cho số tiền, mã môn, khóa học, số tín chỉ; văn bản dài tự động xuống dòng
             table.querySelectorAll("td").forEach(td => {
                 const txt = td.textContent.trim();
+                // Ô số tiền / đơn giá học phí
                 if (/^\d{1,3}(\.\d{3})+(\s*đ|\s*đồng|\s*VNĐ)?$/i.test(txt) || /đồng\/tín chỉ|VNĐ\/tín chỉ/i.test(txt)) {
                     td.style.whiteSpace = "nowrap";
                     td.style.fontWeight = "700";
                     td.style.color = "var(--primary)";
                     td.style.textAlign = "center";
-                }
-                if (/^Khóa\s*\d{4}/i.test(txt) || /^\d{4}/.test(txt)) {
+                } else if (/^Khóa\s*\d{4}/i.test(txt) || /^[A-Z]{2,5}\s*\d{3,5}$/i.test(txt)) {
+                    // Ô Khóa tuyển sinh (Khóa 2024) hoặc Mã môn học (INT1332, BAS1150)
                     td.style.whiteSpace = "nowrap";
                     td.style.textAlign = "center";
+                    td.style.fontWeight = "600";
+                } else if (/^\d{1,2}(\.\d)?$/.test(txt) && !td.classList.contains("col-stt")) {
+                    // Ô Số tín chỉ hoặc số ngắn (VD: 2, 3, 4)
+                    td.style.whiteSpace = "nowrap";
+                    td.style.textAlign = "center";
+                } else if (txt.length > 45) {
+                    // Ô mô tả / tóm tắt nội dung dài: luôn cho phép tự động xuống dòng nhiều hàng
+                    td.style.whiteSpace = "normal";
+                    td.style.textAlign = "left";
+                    td.style.minWidth = "240px";
                 }
             });
+        });
+
+        // Chuyển đổi mục "📌 Nguồn trích dẫn:" (Mẫu 1) thành các thẻ trích dẫn tương tác (bấm vào mở đúng file và đúng trang)
+        this.decorateInlineCitations(bubbleDiv);
+    }
+
+    decorateInlineCitations(bubbleDiv) {
+        if (!bubbleDiv) return;
+
+        // Đánh dấu tiêu đề "📌 Nguồn trích dẫn:"
+        bubbleDiv.querySelectorAll("p, h4, h5").forEach(el => {
+            const txt = (el.textContent || "").trim();
+            if (/^📌?\s*Nguồn(\s+trích\s+dẫn|\s+tham\s+khảo)?\s*:?$/i.test(txt) || txt.startsWith("📌 Nguồn")) {
+                el.classList.add("citation-section-header");
+                const prev = el.previousElementSibling;
+                if (prev && prev.tagName === "HR") {
+                    prev.classList.add("citation-section-divider");
+                }
+            }
+        });
+
+        const citeRegex = /(?:📄\s*)?Trang\s*(\d+)\s*[-–—|]\s*File:\s*([^\s()<>]+)(?:\s*\(([^)]+)\))?/i;
+
+        // Chuyển các dòng danh sách `<li>` chứa Mẫu 1 thành nút bấm mở trực tiếp tài liệu tại trang tương ứng
+        bubbleDiv.querySelectorAll("li").forEach(li => {
+            if (li.querySelector(".inline-citation-chip")) return;
+            const rawText = (li.textContent || "").trim();
+            const match = rawText.match(citeRegex);
+            if (!match) return;
+
+            const page = parseInt(match[1], 10) || 1;
+            const file = (match[2] || "").trim().replace(/[,.;:]+$/, "");
+            const title = (match[3] || "").trim();
+
+            const parentList = li.parentElement;
+            if (parentList && (parentList.tagName === "UL" || parentList.tagName === "OL")) {
+                parentList.classList.add("citation-list-inline");
+            }
+            li.classList.add("citation-list-item");
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "inline-citation-chip";
+            btn.setAttribute("data-file", file);
+            btn.setAttribute("data-page", String(page));
+            btn.setAttribute("data-title", title);
+            btn.title = `Bấm để mở tài liệu ${file} ngay tại Trang ${page}`;
+
+            const safeFile = this.escapeHtml(file);
+            const safeTitle = title ? this.escapeHtml(title) : "";
+
+            btn.innerHTML = `
+                <span class="cite-chip-icon"><i class="fa-solid fa-file-pdf"></i></span>
+                <span class="cite-chip-body">
+                    <span class="cite-chip-main">📄 Trang <strong>${page}</strong> - File: <strong>${safeFile}</strong></span>
+                    ${safeTitle ? `<span class="cite-chip-title">(${safeTitle})</span>` : ""}
+                </span>
+                <span class="cite-chip-action"><i class="fa-solid fa-arrow-up-right-from-square"></i> Xem trang ${page}</span>
+            `;
+
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openSourceModal({
+                    file: file,
+                    page: page,
+                    title: title
+                });
+            });
+
+            li.innerHTML = "";
+            li.appendChild(btn);
         });
     }
 
@@ -1133,6 +1295,7 @@ class PTITChatApp {
                     if (ev.type === "meta") {
                         botMsg.scope_used = ev.scope_used || this.currentScope;
                         botMsg.referenced_files = ev.referenced_files || [];
+                        if (ev.sources) botMsg.sources = ev.sources;
                     } else if (ev.type === "chunk" && ev.delta) {
                         const now = performance.now();
                         if (firstChunkTime === null) {
@@ -1169,6 +1332,7 @@ class PTITChatApp {
                         if (ev.model_used) botMsg.model_used = ev.model_used;
                         if (ev.scope_used) botMsg.scope_used = ev.scope_used;
                         if (ev.referenced_files) botMsg.referenced_files = ev.referenced_files;
+                        if (ev.sources) botMsg.sources = ev.sources;
                         this.updateBotReferencedBadge(domRefs.wrapperDiv, botMsg.referenced_files);
 
                         // Cập nhật thẻ đo tốc độ trên tin nhắn
@@ -1233,12 +1397,135 @@ class PTITChatApp {
         }
     }
 
-    // SOURCE MODAL
-    openSourceModal(src) {
-        this.sourceModalTitle.textContent = `${src.source} - Trang ${src.page}`;
-        this.sourceModalSubtitle.textContent = `Phân loại: [${src.type}] • Trích xuất nguyên bản từ cơ sở tri thức PTIT`;
-        this.sourceModalContent.textContent = src.full_content || src.preview;
+    // SOURCE MODAL (XEM TÀI LIỆU & NHẢY ĐÚNG TRANG TRÍCH DẪN)
+    async openSourceModal(src) {
+        if (!src || !this.sourceModal) return;
+        const file = (src.file || src.source || "").trim();
+        const page = parseInt(src.page, 10) || 1;
+        const title = (src.title || "").trim();
+        const isPdf = file.toLowerCase().endsWith(".pdf");
+
+        this.currentSourceViewer = {
+            file: file,
+            title: title,
+            page: page,
+            totalPages: Math.max(page, 1),
+            isPdf: isPdf,
+            activeTab: isPdf ? "pdf" : "text"
+        };
+
+        if (this.sourceModalTitle) {
+            this.sourceModalTitle.textContent = `📄 Trang ${page} — File: ${file}`;
+        }
+        if (this.sourceModalSubtitle) {
+            this.sourceModalSubtitle.textContent = title || "Đang tải tài liệu gốc...";
+        }
+        if (this.openSourceNewTabText) {
+            this.openSourceNewTabText.textContent = isPdf
+                ? `Mở file PDF ở tab mới (Trang ${page})`
+                : `Mở tài liệu gốc (${file})`;
+        }
+
         this.sourceModal.classList.add("active");
+        await this.loadCitationPage(page);
+    }
+
+    async loadCitationPage(page) {
+        if (!this.currentSourceViewer || !this.currentSourceViewer.file) return;
+        const targetPage = Math.max(1, parseInt(page, 10) || 1);
+        const file = this.currentSourceViewer.file;
+        const sessionParam = encodeURIComponent(this.currentSessionId || "");
+
+        try {
+            const url = `/api/view-page-detail?file=${encodeURIComponent(file)}&page=${targetPage}&session_id=${sessionParam}`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (!res.ok || data.error) {
+                throw new Error(data.error || "Không tìm thấy dữ liệu trang.");
+            }
+
+            const resolvedPage = data.page || targetPage;
+            const totalPages = data.total_pages || resolvedPage;
+            const isPdf = !!data.is_pdf;
+
+            this.currentSourceViewer.file = data.file || file;
+            this.currentSourceViewer.title = data.title || this.currentSourceViewer.title || data.file;
+            this.currentSourceViewer.page = resolvedPage;
+            this.currentSourceViewer.totalPages = totalPages;
+            this.currentSourceViewer.isPdf = isPdf;
+
+            if (this.sourceModalTitle) {
+                this.sourceModalTitle.textContent = `📄 Trang ${resolvedPage} - File: ${data.file}`;
+            }
+            if (this.sourceModalSubtitle) {
+                const originBadge = data.is_user_doc ? "Tài liệu người dùng tải lên" : "Cơ sở tri thức PTIT chính thức";
+                this.sourceModalSubtitle.textContent = `${data.title} • (${originBadge})`;
+            }
+
+            if (isPdf && data.file_url) {
+                const sep = data.file_url.includes("?") ? "&" : "?";
+                const pdfUrlWithPage = `${data.file_url}${sep}_p=${resolvedPage}#page=${resolvedPage}&view=FitH`;
+                if (this.sourcePdfFrame) {
+                    this.sourcePdfFrame.src = pdfUrlWithPage;
+                }
+                if (this.openSourceNewTabBtn) {
+                    this.openSourceNewTabBtn.href = `${data.file_url}#page=${resolvedPage}`;
+                    this.openSourceNewTabBtn.style.display = "inline-flex";
+                }
+                if (this.openSourceNewTabText) {
+                    this.openSourceNewTabText.textContent = `Mở file PDF ở tab mới (Trang ${resolvedPage})`;
+                }
+                this.switchSourceModalTab("pdf");
+            } else {
+                if (this.sourcePdfFrame) {
+                    this.sourcePdfFrame.src = "about:blank";
+                }
+                if (this.openSourceNewTabBtn) {
+                    if (data.file_url) {
+                        this.openSourceNewTabBtn.href = data.file_url;
+                        this.openSourceNewTabBtn.style.display = "inline-flex";
+                        if (this.openSourceNewTabText) {
+                            this.openSourceNewTabText.textContent = `Mở tài liệu gốc (${data.file})`;
+                        }
+                    } else {
+                        this.openSourceNewTabBtn.style.display = "none";
+                    }
+                }
+                if (this.sourceModalContent) {
+                    this.sourceModalContent.textContent = data.text_content || `Không có văn bản trích xuất cho Trang ${resolvedPage}.`;
+                }
+                this.switchSourceModalTab("text");
+            }
+        } catch (err) {
+            console.error("Error loading citation page detail:", err);
+            if (this.sourceModalContent) {
+                this.sourceModalContent.textContent = `Không thể tải chi tiết Trang ${targetPage} của file ${file}: ${err.message || err}`;
+            }
+            this.switchSourceModalTab("text");
+        }
+    }
+
+    switchSourceModalTab(tabName) {
+        if (!this.currentSourceViewer) return;
+        const validTab = (!this.currentSourceViewer.isPdf && tabName !== "text") ? "text" : (tabName || "pdf");
+        this.currentSourceViewer.activeTab = validTab;
+
+        if (this.sourcePdfPane) {
+            this.sourcePdfPane.classList.toggle("active", validTab === "pdf");
+        }
+        if (this.sourceTextPane) {
+            this.sourceTextPane.classList.toggle("active", validTab === "text");
+        }
+    }
+
+    closeSourceModal() {
+        if (this.sourceModal) {
+            this.sourceModal.classList.remove("active");
+        }
+        if (this.sourcePdfFrame) {
+            this.sourcePdfFrame.src = "about:blank";
+        }
     }
 
     // KNOWLEDGE BASE MODAL & STATUS
@@ -1273,10 +1560,20 @@ class PTITChatApp {
                         <h4 class="catalog-item-title">${item.title}</h4>
                         <p class="catalog-item-desc">${item.desc}</p>
                         <div class="catalog-item-meta">
-                            <span><i class="fa-regular fa-file-pdf"></i> ${item.name}</span>
+                            <span><i class="fa-regular fa-file-pdf"></i> ${item.pdf_file || item.name}</span>
                             <span>Kích thước: <strong>${item.file_size}</strong></span>
                         </div>
                     `;
+                    card.style.cursor = "pointer";
+                    card.title = `Bấm để xem tài liệu ${item.pdf_file || item.name}`;
+                    card.addEventListener("click", () => {
+                        if (this.kbModal) this.kbModal.classList.remove("active");
+                        this.openSourceModal({
+                            file: item.pdf_file || item.name,
+                            page: 1,
+                            title: item.title
+                        });
+                    });
                     this.catalogGrid.appendChild(card);
                 });
             }
@@ -1559,6 +1856,10 @@ class PTITChatApp {
 
         let s = text;
 
+        // 0. Loại bỏ phần chân trang "📌 Nguồn trích dẫn:" để giọng nói không đọc tên file PDF
+        s = s.replace(/(?:\n+\s*---\s*)?\n*📌\s*\*{0,2}Nguồn[\s\S]*$/i, " ");
+        s = s.replace(/^\s*[-*•]?\s*📄\s*Trang\s+\d+\s*[-–—|]\s*File:.*$/gim, " ");
+
         // 1. Loại bỏ các khối code, markdown, link, ký tự đặc biệt
         s = s.replace(/```[\s\S]*?```/g, " ")
             .replace(/`[^`]*`/g, " ")
@@ -1775,6 +2076,10 @@ class PTITChatApp {
     }
 
     feedLiveSpeech(rawText, isFinal = false, btnElement = null, activeToken = null) {
+        if (!rawText) return activeToken;
+
+        // Loại bỏ phần chân trang "📌 Nguồn trích dẫn:" khi đang stream để TTS không đọc tên file
+        rawText = rawText.replace(/(?:\n+\s*---\s*)?\n*📌\s*\*{0,2}Nguồn[\s\S]*$/i, "");
         if (!rawText) return activeToken;
 
         // Nếu người dùng đã bấm "Dừng" trong lúc đang stream -> không tự phát tiếp nữa
@@ -2310,22 +2615,77 @@ class PTITChatApp {
         const waveBars = document.createElement("div");
         waveBars.className = "voice-bubble-wave-bars";
 
-        // Natural organic soundwave heights
-        const barHeights = [25, 45, 75, 95, 60, 40, 80, 100, 70, 50, 85, 90, 65, 40, 70, 95, 60, 35, 55, 80, 50, 30];
-        const barElements = [];
-        barHeights.forEach(h => {
-            const bar = document.createElement("span");
-            bar.className = "voice-bar";
-            bar.style.height = `${h}%`;
-            waveBars.appendChild(bar);
-            barElements.push(bar);
-        });
-
-        const progressBar = document.createElement("div");
-        progressBar.className = "voice-bubble-progress";
-
         waveWrap.appendChild(waveBars);
-        waveWrap.appendChild(progressBar);
+
+        // Audio Object logic
+        const audio = new Audio(msg.audioUrl || "");
+
+        // Dynamic organic soundwave bars to fill the full container width seamlessly
+        let barElements = [];
+        const renderWaveBars = () => {
+            waveBars.innerHTML = "";
+            barElements = [];
+
+            // Calculate optimal bar count to fill width (each bar ~2.5-3px + ~2.5px gap = ~5.2px)
+            const wrapWidth = waveWrap.clientWidth || 220;
+            const barCount = Math.max(22, Math.min(80, Math.floor(wrapWidth / 5.2)));
+
+            // Harmonic speech waveform pattern with realistic peaks and troughs
+            const basePeaks = [
+                0.28, 0.45, 0.72, 0.95, 0.62, 0.38, 0.58, 0.86, 1.0, 0.74,
+                0.52, 0.82, 0.94, 0.64, 0.42, 0.75, 0.88, 0.6, 0.36, 0.54,
+                0.8, 0.94, 0.68, 0.46, 0.65, 0.84, 0.98, 0.72, 0.48, 0.32
+            ];
+
+            for (let i = 0; i < barCount; i++) {
+                const ratio = i / barCount;
+                const idx = ratio * basePeaks.length;
+                const i0 = Math.floor(idx) % basePeaks.length;
+                const i1 = (i0 + 1) % basePeaks.length;
+                const frac = idx - Math.floor(idx);
+                const rawVal = basePeaks[i0] * (1 - frac) + basePeaks[i1] * frac;
+
+                // Deterministic pseudo-random jitter based on index so it feels organic
+                const jitter = ((Math.sin(i * 12.9898) * 43758.5453) % 1) * 0.14;
+                const finalVal = Math.max(0.18, Math.min(1.0, rawVal + jitter));
+                const heightPct = Math.round(finalVal * 100);
+
+                const bar = document.createElement("span");
+                bar.className = "voice-bar";
+                bar.style.height = `${heightPct}%`;
+                waveBars.appendChild(bar);
+                barElements.push(bar);
+            }
+
+            // Sync active state if audio is already playing/paused mid-way
+            if (audio && audio.currentTime > 0) {
+                const dur = audio.duration || totalSec || 1;
+                const pct = Math.min(100, Math.max(0, (audio.currentTime / dur) * 100));
+                const activeBarIdx = Math.floor((pct / 100) * barElements.length);
+                barElements.forEach((bar, idx) => {
+                    if (idx <= activeBarIdx) bar.classList.add("active");
+                    else bar.classList.remove("active");
+                });
+            }
+        };
+
+        // Initial render
+        renderWaveBars();
+
+        // Responsive re-flow whenever container width is determined or window resizes
+        if (window.ResizeObserver) {
+            let lastW = 0;
+            const ro = new ResizeObserver((entries) => {
+                for (const entry of entries) {
+                    const newW = Math.round(entry.contentRect.width);
+                    if (newW > 0 && Math.abs(newW - lastW) >= 10) {
+                        lastW = newW;
+                        renderWaveBars();
+                    }
+                }
+            });
+            ro.observe(waveWrap);
+        }
 
         // Duration label
         const durationLabel = document.createElement("span");
@@ -2338,21 +2698,20 @@ class PTITChatApp {
         };
         durationLabel.textContent = totalSec > 0 ? formatTime(totalSec) : "0:00";
 
-        // Download link
-        const downloadLink = document.createElement("a");
-        downloadLink.className = "voice-bubble-dl-btn";
-        downloadLink.href = msg.audioUrl || "#";
-        downloadLink.download = `voice_question_${Date.now()}.webm`;
-        downloadLink.title = "Tải file âm thanh (.mp3 / .webm)";
-        downloadLink.innerHTML = '<i class="fa-solid fa-arrow-down-to-bracket"></i>';
-
         player.appendChild(playBtn);
         player.appendChild(waveWrap);
         player.appendChild(durationLabel);
-        player.appendChild(downloadLink);
 
-        // Audio Object logic
-        const audio = new Audio(msg.audioUrl);
+        // Download link (chỉ hiển thị khi có file âm thanh)
+        if (msg.audioUrl) {
+            const downloadLink = document.createElement("a");
+            downloadLink.className = "voice-bubble-dl-btn";
+            downloadLink.href = msg.audioUrl;
+            downloadLink.download = `voice_question_${Date.now()}.webm`;
+            downloadLink.title = "Tải file âm thanh (.mp3 / .webm)";
+            downloadLink.innerHTML = '<i class="fa-solid fa-download"></i>';
+            player.appendChild(downloadLink);
+        }
 
         audio.addEventListener("loadedmetadata", () => {
             if (!totalSec && audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
@@ -2391,10 +2750,9 @@ class PTITChatApp {
             const cur = audio.currentTime;
             const dur = audio.duration || totalSec || 1;
             const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
-            progressBar.style.width = `${pct}%`;
             durationLabel.textContent = formatTime(cur);
 
-            // Highlight wave bars
+            // Highlight wave bars directly to show playback progress on the soundwave
             const activeBarIdx = Math.floor((pct / 100) * barElements.length);
             barElements.forEach((bar, idx) => {
                 if (idx <= activeBarIdx) bar.classList.add("active");
@@ -2405,7 +2763,6 @@ class PTITChatApp {
         audio.addEventListener("ended", () => {
             playBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
             playBtn.classList.remove("playing");
-            progressBar.style.width = "0%";
             durationLabel.textContent = formatTime(totalSec || audio.duration || 0);
             barElements.forEach(bar => bar.classList.remove("active"));
             if (this.activeVoiceAudio === audio) {
@@ -2422,7 +2779,11 @@ class PTITChatApp {
             const dur = audio.duration || totalSec;
             if (dur && !isNaN(dur) && isFinite(dur)) {
                 audio.currentTime = pct * dur;
-                progressBar.style.width = `${pct * 100}%`;
+                const activeBarIdx = Math.floor(pct * barElements.length);
+                barElements.forEach((bar, idx) => {
+                    if (idx <= activeBarIdx) bar.classList.add("active");
+                    else bar.classList.remove("active");
+                });
             }
         });
 
@@ -2610,7 +2971,8 @@ class PTITChatApp {
                 console.warn("Upload voice audio error, using local blob:", upErr);
             }
 
-            const textToSend = forcedTranscript || this.voiceTranscript || this.userInput.value.trim() || "Câu hỏi bằng giọng nói";
+            const rawTextToSend = forcedTranscript || this.voiceTranscript || this.userInput.value.trim() || "Câu hỏi bằng giọng nói";
+            const textToSend = this.normalizeVoiceTranscript(rawTextToSend);
             this.userInput.value = "";
             this.autoGrowTextarea();
 
