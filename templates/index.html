@@ -27,11 +27,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/style.css?v=26">
+    <link rel="stylesheet" href="/static/css/style.css?v=28">
 </head>
 
 <body>
-    <div class="app-layout">
+    <div class="app-layout" id="appLayout">
+        <!-- BACKDROP FOR MOBILE SIDEBAR -->
+        <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
         <!-- SIDEBAR -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
@@ -42,8 +45,11 @@
 
                     </div>
                 </div>
-                <button class="icon-btn mobile-close-btn" id="closeSidebarBtn" title="Đóng menu">
-                    <i class="fa-solid fa-xmark"></i>
+                <button class="icon-btn sidebar-toggle-btn" id="closeSidebarBtn" title="Đóng thanh bên (Ctrl+B)" aria-label="Đóng thanh bên">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sidebar-icon">
+                        <rect width="18" height="18" x="3" y="3" rx="2.5"></rect>
+                        <path d="M9 3v18"></path>
+                    </svg>
                 </button>
             </div>
 
@@ -103,8 +109,11 @@
         <main class="chat-container">
             <!-- FLOATING TOP ACTIONS (Tối giản, không chiếm diện tích Header) -->
             <div class="chat-floating-actions" id="chatFloatingActions">
-                <button class="floating-btn mobile-menu-btn" id="openSidebarBtn" title="Mở danh mục">
-                    <i class="fa-solid fa-bars-staggered"></i>
+                <button class="floating-btn sidebar-toggle-btn" id="openSidebarBtn" title="Mở thanh bên (Ctrl+B)" aria-label="Mở thanh bên">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sidebar-icon">
+                        <rect width="18" height="18" x="3" y="3" rx="2.5"></rect>
+                        <path d="M9 3v18"></path>
+                    </svg>
                 </button>
                 <span id="currentChatTitle" class="sr-only">Trợ lý Hỏi đáp Học viện PTIT</span>
                 <span id="modelBadgeDisplay" class="sr-only"></span>
@@ -114,9 +123,35 @@
                         <i class="fa-solid fa-folder-open"></i>
                         <span id="navDocsCountText">Tài liệu (0)</span>
                     </button>
-                    <button class="floating-action-btn" id="exportChatBtn" title="Xuất nội dung trò chuyện (Markdown)">
-                        <i class="fa-solid fa-download"></i>
-                    </button>
+                    <!-- CHAT OPTIONS MENU (GEMINI STYLE) -->
+                    <div class="chat-menu-dropdown-wrapper" id="chatMenuDropdownWrapper">
+                        <button class="floating-action-btn chat-menu-btn" id="chatMenuBtn" title="Tùy chọn cuộc trò chuyện" aria-label="Tùy chọn cuộc trò chuyện" aria-expanded="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="5" r="2.1"></circle>
+                                <circle cx="12" cy="12" r="2.1"></circle>
+                                <circle cx="12" cy="19" r="2.1"></circle>
+                            </svg>
+                        </button>
+                        <div class="chat-dropdown-menu" id="chatDropdownMenu" role="menu">
+                            <button class="chat-dropdown-item" id="menuPinBtn" role="menuitem" type="button">
+                                <i class="fa-solid fa-thumbtack" id="menuPinIcon"></i>
+                                <span id="menuPinText">Ghim</span>
+                            </button>
+                            <button class="chat-dropdown-item" id="menuRenameBtn" role="menuitem" type="button">
+                                <i class="fa-solid fa-pen"></i>
+                                <span>Đổi tên</span>
+                            </button>
+                            <button class="chat-dropdown-item" id="exportChatBtn" role="menuitem" type="button">
+                                <i class="fa-solid fa-download"></i>
+                                <span>Xuất cuộc trò chuyện (Markdown)</span>
+                            </button>
+                            <div class="chat-dropdown-divider"></div>
+                            <button class="chat-dropdown-item text-danger" id="menuDeleteChatBtn" role="menuitem" type="button">
+                                <i class="fa-regular fa-trash-can"></i>
+                                <span>Xóa cuộc trò chuyện</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -387,6 +422,35 @@
         </main>
     </div>
 
+
+    <!-- MODAL: RENAME CHAT (GEMINI STYLE) -->
+    <div class="modal-backdrop" id="renameChatModal">
+        <div class="modal-content" style="max-width: 440px;">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="modal-icon"><i class="fa-solid fa-pen"></i></div>
+                    <div>
+                        <h3 class="modal-title">Đổi tên cuộc trò chuyện</h3>
+                        <p class="modal-subtitle">Đặt tiêu đề gợi nhớ cho đoạn hội thoại này</p>
+                    </div>
+                </div>
+                <button class="icon-btn" id="closeRenameModalBtn" title="Đóng"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="renameChatForm" onsubmit="return false;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label" for="renameChatInput">Tên cuộc trò chuyện</label>
+                        <input type="text" id="renameChatInput" class="form-control" maxlength="80"
+                            placeholder="Nhập tên cuộc trò chuyện..." autocomplete="off">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelRenameBtn">Hủy</button>
+                <button class="btn btn-primary" id="saveRenameBtn">Lưu thay đổi</button>
+            </div>
+        </div>
+    </div>
 
     <!-- MODAL: SETTINGS & API KEY -->
     <div class="modal-backdrop" id="settingsModal">

@@ -81,6 +81,7 @@ class PTITChatApp {
         this.setupMarkdown();
         this.loadSettings();
         this.loadSessions();
+        this.initSidebar();
         this.bindEvents();
         this.autoGrowTextarea();
         this.initSpeechSynthesisVoices();
@@ -115,7 +116,9 @@ class PTITChatApp {
 
     bindElements() {
         // Layout Elements
+        this.appLayout = document.getElementById("appLayout") || document.querySelector(".app-layout");
         this.sidebar = document.getElementById("sidebar");
+        this.sidebarBackdrop = document.getElementById("sidebarBackdrop");
         this.openSidebarBtn = document.getElementById("openSidebarBtn");
         this.closeSidebarBtn = document.getElementById("closeSidebarBtn");
         this.themeToggleBtn = document.getElementById("themeToggleBtn");
@@ -143,6 +146,21 @@ class PTITChatApp {
         this.voiceInputBtn = document.getElementById("voiceInputBtn");
         this.exportChatBtn = document.getElementById("exportChatBtn");
         this.clearCurrentChatBtn = document.getElementById("clearCurrentChatBtn");
+
+        // Gemini-style 3-dots Chat Options Menu & Rename Modal
+        this.chatMenuDropdownWrapper = document.getElementById("chatMenuDropdownWrapper");
+        this.chatMenuBtn = document.getElementById("chatMenuBtn");
+        this.chatDropdownMenu = document.getElementById("chatDropdownMenu");
+        this.menuPinBtn = document.getElementById("menuPinBtn");
+        this.menuPinIcon = document.getElementById("menuPinIcon");
+        this.menuPinText = document.getElementById("menuPinText");
+        this.menuRenameBtn = document.getElementById("menuRenameBtn");
+        this.menuDeleteChatBtn = document.getElementById("menuDeleteChatBtn");
+        this.renameChatModal = document.getElementById("renameChatModal");
+        this.renameChatInput = document.getElementById("renameChatInput");
+        this.saveRenameBtn = document.getElementById("saveRenameBtn");
+        this.cancelRenameBtn = document.getElementById("cancelRenameBtn");
+        this.closeRenameModalBtn = document.getElementById("closeRenameModalBtn");
 
         // Document Upload & Scope Switcher
         this.fileUploadInput = document.getElementById("fileUploadInput");
@@ -238,15 +256,84 @@ class PTITChatApp {
         // Theme Toggle
         this.themeToggleBtn.addEventListener("click", () => this.toggleTheme());
 
-        // Sidebar Mobile
-        if (this.openSidebarBtn) this.openSidebarBtn.addEventListener("click", () => this.sidebar && this.sidebar.classList.add("open"));
-        if (this.closeSidebarBtn) this.closeSidebarBtn.addEventListener("click", () => this.sidebar && this.sidebar.classList.remove("open"));
+        // Sidebar Toggle (Window Icon)
+        if (this.openSidebarBtn) this.openSidebarBtn.addEventListener("click", () => this.openSidebar());
+        if (this.closeSidebarBtn) this.closeSidebarBtn.addEventListener("click", () => this.closeSidebar());
+        if (this.sidebarBackdrop) this.sidebarBackdrop.addEventListener("click", () => this.closeSidebar());
+
+        // Global hotkey Ctrl+B / Cmd+B to toggle sidebar
+        window.addEventListener("keydown", (e) => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
+                if (document.activeElement === this.userInput && this.userInput.selectionStart !== this.userInput.selectionEnd) {
+                    return;
+                }
+                e.preventDefault();
+                this.toggleSidebar();
+            }
+        });
 
         // Sessions
         if (this.newChatBtn) this.newChatBtn.addEventListener("click", () => this.createNewSession());
         if (this.clearAllHistoryBtn) this.clearAllHistoryBtn.addEventListener("click", () => this.clearAllHistory());
         if (this.clearCurrentChatBtn) this.clearCurrentChatBtn.addEventListener("click", () => this.clearCurrentChat());
-        if (this.exportChatBtn) this.exportChatBtn.addEventListener("click", () => this.exportCurrentChat());
+
+        // Chat 3-dots Options Menu (Gemini Style)
+        if (this.chatMenuBtn) {
+            this.chatMenuBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.toggleChatMenu();
+            });
+        }
+        if (this.menuPinBtn) {
+            this.menuPinBtn.addEventListener("click", () => this.togglePinCurrentChat());
+        }
+        if (this.menuRenameBtn) {
+            this.menuRenameBtn.addEventListener("click", () => this.openRenameModal());
+        }
+        if (this.exportChatBtn) {
+            this.exportChatBtn.addEventListener("click", () => {
+                this.closeChatMenu();
+                this.exportCurrentChat();
+            });
+        }
+        if (this.menuDeleteChatBtn) {
+            this.menuDeleteChatBtn.addEventListener("click", () => this.deleteCurrentChatFromMenu());
+        }
+
+        // Close dropdown on outside click or Escape
+        document.addEventListener("click", (e) => {
+            if (this.chatDropdownMenu && this.chatDropdownMenu.classList.contains("show")) {
+                if (this.chatMenuDropdownWrapper && !this.chatMenuDropdownWrapper.contains(e.target)) {
+                    this.closeChatMenu();
+                }
+            }
+        });
+
+        // Rename Chat Modal Events
+        if (this.saveRenameBtn) {
+            this.saveRenameBtn.addEventListener("click", () => this.saveRenameChat());
+        }
+        if (this.cancelRenameBtn) {
+            this.cancelRenameBtn.addEventListener("click", () => this.closeRenameModal());
+        }
+        if (this.closeRenameModalBtn) {
+            this.closeRenameModalBtn.addEventListener("click", () => this.closeRenameModal());
+        }
+        if (this.renameChatInput) {
+            this.renameChatInput.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    this.saveRenameChat();
+                } else if (e.key === "Escape") {
+                    this.closeRenameModal();
+                }
+            });
+        }
+        if (this.renameChatModal) {
+            this.renameChatModal.addEventListener("click", (e) => {
+                if (e.target === this.renameChatModal) this.closeRenameModal();
+            });
+        }
 
         // Chat Input & Auto-grow
         this.userInput.addEventListener("input", () => this.autoGrowTextarea());
@@ -500,6 +587,86 @@ class PTITChatApp {
         }
     }
 
+    initSidebar() {
+        if (!this.sidebar) return;
+
+        // Restore desktop collapsed state from localStorage
+        if (window.innerWidth > 768) {
+            try {
+                const isCollapsed = localStorage.getItem("ptit_sidebar_collapsed") === "true";
+                if (isCollapsed) {
+                    this.sidebar.classList.add("collapsed");
+                    if (this.appLayout) this.appLayout.classList.add("sidebar-collapsed");
+                }
+            } catch (e) {
+                console.warn("Could not read sidebar preference:", e);
+            }
+        }
+
+        // Handle responsive resize smoothly
+        window.addEventListener("resize", () => {
+            if (window.innerWidth <= 768) {
+                this.sidebar.classList.remove("collapsed");
+                if (this.appLayout) this.appLayout.classList.remove("sidebar-collapsed");
+            } else {
+                this.sidebar.classList.remove("open");
+                if (this.sidebarBackdrop) this.sidebarBackdrop.classList.remove("active");
+                const isCollapsed = localStorage.getItem("ptit_sidebar_collapsed") === "true";
+                if (isCollapsed) {
+                    this.sidebar.classList.add("collapsed");
+                    if (this.appLayout) this.appLayout.classList.add("sidebar-collapsed");
+                }
+            }
+        });
+    }
+
+    toggleSidebar() {
+        if (window.innerWidth <= 768) {
+            if (!this.sidebar) return;
+            const isOpen = this.sidebar.classList.toggle("open");
+            if (this.sidebarBackdrop) {
+                this.sidebarBackdrop.classList.toggle("active", isOpen);
+            }
+        } else {
+            if (!this.sidebar) return;
+            const isCollapsed = this.sidebar.classList.toggle("collapsed");
+            if (this.appLayout) {
+                this.appLayout.classList.toggle("sidebar-collapsed", isCollapsed);
+            }
+            try {
+                localStorage.setItem("ptit_sidebar_collapsed", isCollapsed ? "true" : "false");
+            } catch (e) { }
+        }
+    }
+
+    openSidebar() {
+        if (!this.sidebar) return;
+        if (window.innerWidth <= 768) {
+            this.sidebar.classList.add("open");
+            if (this.sidebarBackdrop) this.sidebarBackdrop.classList.add("active");
+        } else {
+            this.sidebar.classList.remove("collapsed");
+            if (this.appLayout) this.appLayout.classList.remove("sidebar-collapsed");
+            try {
+                localStorage.setItem("ptit_sidebar_collapsed", "false");
+            } catch (e) { }
+        }
+    }
+
+    closeSidebar() {
+        if (!this.sidebar) return;
+        if (window.innerWidth <= 768) {
+            this.sidebar.classList.remove("open");
+            if (this.sidebarBackdrop) this.sidebarBackdrop.classList.remove("active");
+        } else {
+            this.sidebar.classList.add("collapsed");
+            if (this.appLayout) this.appLayout.classList.add("sidebar-collapsed");
+            try {
+                localStorage.setItem("ptit_sidebar_collapsed", "true");
+            } catch (e) { }
+        }
+    }
+
     toggleTheme() {
         const currentTheme = document.documentElement.getAttribute("data-theme") || "dark";
         const newTheme = currentTheme === "dark" ? "light" : "dark";
@@ -712,8 +879,9 @@ class PTITChatApp {
         this.renderUploadedFiles([]);
         this.setScope("ptit_only");
         this.switchSession(newSession.id);
+        this.updateMenuPinState();
         if (window.innerWidth <= 768) {
-            this.sidebar.classList.remove("open");
+            this.closeSidebar();
         }
     }
 
@@ -731,6 +899,10 @@ class PTITChatApp {
         this.renderMessages(session.messages);
         this.renderHistoryList();
         this.fetchSessionDocs(sessionId);
+        this.updateMenuPinState();
+        if (window.innerWidth <= 768) {
+            this.closeSidebar();
+        }
     }
 
     deleteSession(sessionId, event) {
@@ -788,6 +960,20 @@ class PTITChatApp {
         }
     }
 
+    getSortedSessions() {
+        return [...this.sessions].sort((a, b) => {
+            const aPinned = a.pinned ? 1 : 0;
+            const bPinned = b.pinned ? 1 : 0;
+            if (aPinned !== bPinned) {
+                return bPinned - aPinned; // pinned first
+            }
+            if (a.pinned && b.pinned) {
+                return (b.pinnedAt || 0) - (a.pinnedAt || 0);
+            }
+            return 0;
+        });
+    }
+
     renderHistoryList() {
         if (!this.chatHistoryList) return;
         this.chatHistoryList.innerHTML = "";
@@ -796,18 +982,130 @@ class PTITChatApp {
             return;
         }
 
-        this.sessions.forEach(sess => {
+        const sorted = this.getSortedSessions();
+        sorted.forEach(sess => {
             const item = document.createElement("div");
-            item.className = `history-item ${sess.id === this.currentSessionId ? "active" : ""}`;
+            item.className = `history-item ${sess.id === this.currentSessionId ? "active" : ""} ${sess.pinned ? "is-pinned" : ""}`;
             item.innerHTML = `
-                <i class="fa-regular fa-message" style="font-size: 0.82rem"></i>
-                <span class="history-item-title">${this.escapeHtml(sess.title)}</span>
+                <i class="${sess.pinned ? 'fa-solid fa-thumbtack pin-badge' : 'fa-regular fa-message'}" style="font-size: 0.82rem"></i>
+                <span class="history-item-title" title="${this.escapeHtml(sess.title)}">${this.escapeHtml(sess.title)}</span>
                 <button class="history-delete-btn" title="Xóa đoạn chat"><i class="fa-solid fa-trash-can"></i></button>
             `;
             item.addEventListener("click", () => this.switchSession(sess.id));
             item.querySelector(".history-delete-btn").addEventListener("click", (e) => this.deleteSession(sess.id, e));
             this.chatHistoryList.appendChild(item);
         });
+    }
+
+    // GEMINI-STYLE 3-DOTS MENU & ACTIONS
+    toggleChatMenu() {
+        if (!this.chatDropdownMenu) return;
+        const isOpen = this.chatDropdownMenu.classList.toggle("show");
+        if (this.chatMenuBtn) {
+            this.chatMenuBtn.classList.toggle("active", isOpen);
+            this.chatMenuBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        }
+        if (isOpen) {
+            this.updateMenuPinState();
+        }
+    }
+
+    closeChatMenu() {
+        if (!this.chatDropdownMenu) return;
+        this.chatDropdownMenu.classList.remove("show");
+        if (this.chatMenuBtn) {
+            this.chatMenuBtn.classList.remove("active");
+            this.chatMenuBtn.setAttribute("aria-expanded", "false");
+        }
+    }
+
+    updateMenuPinState() {
+        const session = this.sessions.find(s => s.id === this.currentSessionId);
+        const isPinned = session && !!session.pinned;
+        if (this.menuPinIcon) {
+            this.menuPinIcon.className = isPinned ? "fa-solid fa-thumbtack-slash" : "fa-solid fa-thumbtack";
+        }
+        if (this.menuPinText) {
+            this.menuPinText.textContent = isPinned ? "Bỏ ghim" : "Ghim";
+        }
+    }
+
+    togglePinCurrentChat() {
+        this.closeChatMenu();
+        const session = this.sessions.find(s => s.id === this.currentSessionId);
+        if (!session) return;
+
+        session.pinned = !session.pinned;
+        if (session.pinned) {
+            session.pinnedAt = Date.now();
+        } else {
+            delete session.pinnedAt;
+        }
+
+        this.saveSessions();
+        this.updateMenuPinState();
+        this.renderHistoryList();
+
+        if (session.pinned) {
+            this.showToast("Đã ghim cuộc trò chuyện lên đầu danh sách.", "success");
+        } else {
+            this.showToast("Đã bỏ ghim cuộc trò chuyện.", "info");
+        }
+    }
+
+    openRenameModal() {
+        this.closeChatMenu();
+        const session = this.sessions.find(s => s.id === this.currentSessionId);
+        if (!session) return;
+
+        if (this.renameChatInput) {
+            this.renameChatInput.value = session.title || "";
+        }
+        if (this.renameChatModal) {
+            this.renameChatModal.classList.add("active");
+            setTimeout(() => {
+                if (this.renameChatInput) {
+                    this.renameChatInput.focus();
+                    this.renameChatInput.select();
+                }
+            }, 80);
+        }
+    }
+
+    closeRenameModal() {
+        if (this.renameChatModal) {
+            this.renameChatModal.classList.remove("active");
+        }
+    }
+
+    saveRenameChat() {
+        const session = this.sessions.find(s => s.id === this.currentSessionId);
+        if (!session || !this.renameChatInput) return;
+
+        const newTitle = this.renameChatInput.value.trim();
+        if (!newTitle) {
+            this.showToast("Tên cuộc trò chuyện không được để trống.", "warning");
+            return;
+        }
+
+        session.title = newTitle;
+        session.isCustomTitle = true;
+        this.saveSessions();
+        if (this.currentChatTitle) this.currentChatTitle.textContent = newTitle;
+        this.renderHistoryList();
+        this.closeRenameModal();
+        this.showToast("Đã đổi tên cuộc trò chuyện thành công.", "success");
+    }
+
+    deleteCurrentChatFromMenu() {
+        this.closeChatMenu();
+        const session = this.sessions.find(s => s.id === this.currentSessionId);
+        if (!session) return;
+
+        const hasMessages = session.messages && session.messages.length > 0;
+        if (!hasMessages || confirm("Bạn có chắc chắn muốn xóa cuộc trò chuyện này?")) {
+            this.deleteSession(this.currentSessionId);
+        }
     }
 
     renderMessages(messages) {
@@ -1187,8 +1485,8 @@ class PTITChatApp {
             currentSession = this.sessions.find(s => s.id === this.currentSessionId) || this.sessions[0];
         }
 
-        // Set title on first message
-        if (currentSession.messages.length === 0) {
+        // Set title on first message (unless user has manually renamed it)
+        if (currentSession.messages.length === 0 && !currentSession.isCustomTitle) {
             currentSession.title = text.length > 32 ? text.substring(0, 32) + "..." : text;
             if (this.currentChatTitle) this.currentChatTitle.textContent = currentSession.title;
         }
