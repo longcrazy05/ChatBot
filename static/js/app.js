@@ -56,7 +56,7 @@ class PTITChatApp {
         this.sessions = [];
         this.settings = {
             apiKey: "",
-            model: "gemini-2.5-flash-lite",
+            model: "gemini-3.5-flash-lite",
             topK: 4,
             autoVoice: false,
             showLatency: false,
@@ -454,26 +454,11 @@ class PTITChatApp {
 
     getModelDisplayLabel(modelId) {
         const labels = {
-            "gemini-2.5-flash-lite": "2.5 Flash-Lite (Khuyên dùng)",
-            "gemini-flash-lite-latest": "Flash-Lite Latest (Nhanh)",
-            "gemini-2.5-flash": "2.5 Flash (Cân bằng)",
-            "gemini-flash-latest": "Flash Latest (Tiêu chuẩn)",
-            "gemini-3-flash-preview": "3.0 Flash Preview",
-            "gemini-3.1-flash-lite-preview": "3.1 Flash-Lite Preview",
-            "gemini-2.0-flash": "2.0 Flash (Ổn định)",
-            "gemini-2.0-flash-lite": "2.0 Flash-Lite (Tiết kiệm)"
+            "gemini-3.5-flash-lite": "3.5 Flash-Lite (Mặc định)",
+            "gemini-3.6-flash": "3.6 Flash (Cân bằng & Nhanh)",
+            "gemini-3.8-flash": "3.8 Flash (Tư duy sâu)"
         };
-        const aliasMap = {
-            "gemini-3.1-flash-lite": "gemini-2.5-flash-lite",
-            "gemini-3.5-flash-lite": "gemini-2.5-flash-lite",
-            "gemini-3.5-flash": "gemini-2.5-flash",
-            "gemini-3.6-flash": "gemini-2.5-flash",
-            "gemini-3.7-flash": "gemini-2.5-flash",
-            "gemini-3.8-flash": "gemini-2.5-flash",
-            "gemini-pro-latest": "gemini-2.5-flash"
-        };
-        const resolved = aliasMap[modelId] || modelId;
-        return labels[resolved] || labels[modelId] || modelId;
+        return labels[modelId] || modelId;
     }
 
     initQuickModelSelector() {
@@ -484,7 +469,7 @@ class PTITChatApp {
         const quickSelect = document.getElementById("quickModelSelect");
 
         this.updateQuickModelUI = (modelValue) => {
-            const currentModel = modelValue || this.settings.model || "gemini-2.5-flash-lite";
+            const currentModel = modelValue || this.settings.model || "gemini-3.5-flash-lite";
             if (label) {
                 label.textContent = this.getModelDisplayLabel(currentModel);
             }
@@ -696,29 +681,12 @@ class PTITChatApp {
             try {
                 this.settings = { ...this.settings, ...JSON.parse(savedSettings) };
                 const validModels = [
-                    "gemini-2.5-flash-lite",
-                    "gemini-flash-lite-latest",
-                    "gemini-2.5-flash",
-                    "gemini-flash-latest",
-                    "gemini-3-flash-preview",
-                    "gemini-3.1-flash-lite-preview",
-                    "gemini-2.0-flash",
-                    "gemini-2.0-flash-lite"
+                    "gemini-3.5-flash-lite",
+                    "gemini-3.6-flash",
+                    "gemini-3.8-flash"
                 ];
-                const aliasMap = {
-                    "gemini-3.1-flash-lite": "gemini-2.5-flash-lite",
-                    "gemini-3.5-flash-lite": "gemini-2.5-flash-lite",
-                    "gemini-3.5-flash": "gemini-2.5-flash",
-                    "gemini-3.6-flash": "gemini-2.5-flash",
-                    "gemini-3.7-flash": "gemini-2.5-flash",
-                    "gemini-3.8-flash": "gemini-2.5-flash",
-                    "gemini-pro-latest": "gemini-2.5-flash"
-                };
-                if (this.settings.model && aliasMap[this.settings.model]) {
-                    this.settings.model = aliasMap[this.settings.model];
-                }
                 if (!this.settings.model || !validModels.includes(this.settings.model)) {
-                    this.settings.model = "gemini-2.5-flash-lite";
+                    this.settings.model = "gemini-3.5-flash-lite";
                     localStorage.setItem("ptit_chat_settings", JSON.stringify(this.settings));
                 }
             } catch (e) {
@@ -732,7 +700,7 @@ class PTITChatApp {
 
     openSettingsModal() {
         this.customApiKeyInput.value = this.settings.apiKey || "";
-        this.modelSelect.value = this.settings.model || "gemini-2.5-flash-lite";
+        this.modelSelect.value = this.settings.model || "gemini-3.5-flash-lite";
         this.topKInput.value = this.settings.topK || 4;
         this.topKValue.textContent = this.topKInput.value;
         this.autoVoiceToggle.checked = !!this.settings.autoVoice;
@@ -792,7 +760,7 @@ class PTITChatApp {
     resetSettings() {
         this.settings = {
             apiKey: "",
-            model: "gemini-2.5-flash-lite",
+            model: "gemini-3.5-flash-lite",
             topK: 4,
             autoVoice: false,
             showLatency: false,
@@ -801,7 +769,7 @@ class PTITChatApp {
         };
         this.lastBenchmark = null;
         this.customApiKeyInput.value = "";
-        this.modelSelect.value = "gemini-2.5-flash-lite";
+        this.modelSelect.value = "gemini-3.5-flash-lite";
         this.topKInput.value = 4;
         this.topKValue.textContent = "4";
         this.autoVoiceToggle.checked = false;
@@ -810,10 +778,10 @@ class PTITChatApp {
         if (this.voiceSpeedSelect) this.voiceSpeedSelect.value = "1.0";
         localStorage.removeItem("ptit_chat_settings");
         if (this.modelBadgeDisplay) {
-            this.modelBadgeDisplay.textContent = "gemini-2.5-flash-lite";
+            this.modelBadgeDisplay.textContent = "gemini-3.5-flash-lite";
         }
         if (this.updateQuickModelUI) {
-            this.updateQuickModelUI("gemini-2.5-flash-lite");
+            this.updateQuickModelUI("gemini-3.5-flash-lite");
         }
         this.updateVoiceStatusUI("female");
         this.updateBenchmarkSettingsDisplay();
@@ -1259,6 +1227,12 @@ class PTITChatApp {
                 if (prev && prev.tagName === "HR") {
                     prev.classList.add("citation-section-divider");
                 }
+            } else if (/^🔍?\s*Nguồn(\s+từ)?\s*Internet\s*:?$/i.test(txt) || txt.startsWith("🔍 Nguồn từ Internet")) {
+                el.classList.add("citation-section-header");
+                const prev = el.previousElementSibling;
+                if (prev && prev.tagName === "HR") {
+                    prev.classList.add("citation-section-divider");
+                }
             }
         });
 
@@ -1266,53 +1240,101 @@ class PTITChatApp {
 
         // Chuyển các dòng danh sách `<li>` chứa Mẫu 1 thành nút bấm mở trực tiếp tài liệu tại trang tương ứng
         bubbleDiv.querySelectorAll("li").forEach(li => {
-            if (li.querySelector(".inline-citation-chip")) return;
+            if (li.querySelector(".inline-citation-chip") || li.querySelector(".inline-web-citation-chip")) return;
             const rawText = (li.textContent || "").trim();
             const match = rawText.match(citeRegex);
-            if (!match) return;
+            if (match) {
+                const page = parseInt(match[1], 10) || 1;
+                const file = (match[2] || "").trim().replace(/[,.;:]+$/, "");
+                const title = (match[3] || "").trim();
 
-            const page = parseInt(match[1], 10) || 1;
-            const file = (match[2] || "").trim().replace(/[,.;:]+$/, "");
-            const title = (match[3] || "").trim();
+                const parentList = li.parentElement;
+                if (parentList && (parentList.tagName === "UL" || parentList.tagName === "OL")) {
+                    parentList.classList.add("citation-list-inline");
+                }
+                li.classList.add("citation-list-item");
 
-            const parentList = li.parentElement;
-            if (parentList && (parentList.tagName === "UL" || parentList.tagName === "OL")) {
-                parentList.classList.add("citation-list-inline");
-            }
-            li.classList.add("citation-list-item");
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "inline-citation-chip";
+                btn.setAttribute("data-file", file);
+                btn.setAttribute("data-page", String(page));
+                btn.setAttribute("data-title", title);
+                btn.title = `Bấm để mở tài liệu ${file} ngay tại Trang ${page}`;
 
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "inline-citation-chip";
-            btn.setAttribute("data-file", file);
-            btn.setAttribute("data-page", String(page));
-            btn.setAttribute("data-title", title);
-            btn.title = `Bấm để mở tài liệu ${file} ngay tại Trang ${page}`;
+                const safeFile = this.escapeHtml(file);
+                const safeTitle = title ? this.escapeHtml(title) : "";
 
-            const safeFile = this.escapeHtml(file);
-            const safeTitle = title ? this.escapeHtml(title) : "";
+                btn.innerHTML = `
+                    <span class="cite-chip-icon"><i class="fa-solid fa-file-pdf"></i></span>
+                    <span class="cite-chip-body">
+                        <span class="cite-chip-main">📄 Trang <strong>${page}</strong> - File: <strong>${safeFile}</strong></span>
+                        ${safeTitle ? `<span class="cite-chip-title">(${safeTitle})</span>` : ""}
+                    </span>
+                    <span class="cite-chip-action"><i class="fa-solid fa-arrow-up-right-from-square"></i> Xem trang ${page}</span>
+                `;
 
-            btn.innerHTML = `
-                <span class="cite-chip-icon"><i class="fa-solid fa-file-pdf"></i></span>
-                <span class="cite-chip-body">
-                    <span class="cite-chip-main">📄 Trang <strong>${page}</strong> - File: <strong>${safeFile}</strong></span>
-                    ${safeTitle ? `<span class="cite-chip-title">(${safeTitle})</span>` : ""}
-                </span>
-                <span class="cite-chip-action"><i class="fa-solid fa-arrow-up-right-from-square"></i> Xem trang ${page}</span>
-            `;
-
-            btn.addEventListener("click", (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.openSourceModal({
-                    file: file,
-                    page: page,
-                    title: title
+                btn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.openSourceModal({
+                        file: file,
+                        page: page,
+                        title: title
+                    });
                 });
-            });
 
-            li.innerHTML = "";
-            li.appendChild(btn);
+                li.innerHTML = "";
+                li.appendChild(btn);
+                return;
+            }
+
+            // Chuyển các dòng danh sách `<li>` chứa link nguồn web thành chip liên kết
+            const link = li.querySelector("a");
+            if (link && (rawText.includes("🌐") || rawText.toLowerCase().includes("http"))) {
+                const url = link.getAttribute("href") || "";
+                const title = link.textContent.trim().replace(/^🌐\s*/, "") || url;
+                if (!url) return;
+
+                const parentList = li.parentElement;
+                if (parentList && (parentList.tagName === "UL" || parentList.tagName === "OL")) {
+                    parentList.classList.add("citation-list-inline");
+                }
+                li.classList.add("citation-list-item");
+
+                const a = document.createElement("a");
+                a.href = url;
+                a.target = "_blank";
+                a.rel = "noopener noreferrer";
+                a.className = "inline-web-citation-chip";
+                a.title = `Mở liên kết web: ${url}`;
+
+                const hasHighlight = url.includes(":~:text=") || url.includes("#search=");
+                const safeTitle = this.escapeHtml(title);
+                let domain = "";
+                try {
+                    domain = new URL(url).hostname;
+                } catch (e) {
+                    domain = url;
+                }
+                const safeDomain = this.escapeHtml(domain);
+
+                a.title = hasHighlight
+                    ? `Mở trang web và tự động cuộn đến bôi sáng nội dung: ${url}`
+                    : `Mở liên kết web: ${url}`;
+
+                a.innerHTML = `
+                    <span class="cite-chip-icon"><i class="${hasHighlight ? "fa-solid fa-highlighter" : "fa-solid fa-globe"}"></i></span>
+                    <span class="cite-chip-body">
+                        <span class="cite-chip-main">${safeTitle}</span>
+                        <span class="cite-chip-title">${safeDomain}</span>
+                    </span>
+                    <span class="cite-chip-action"><i class="fa-solid ${hasHighlight ? "fa-highlighter" : "fa-arrow-up-right-from-square"}"></i> ${hasHighlight ? "Xem đoạn khớp" : "Mở nguồn"}</span>
+                `;
+
+                li.innerHTML = "";
+                li.appendChild(a);
+            }
         });
     }
 
@@ -1326,6 +1348,21 @@ class PTITChatApp {
                 wrapperDiv.insertBefore(existingBadge, wrapperDiv.firstChild);
             }
             existingBadge.innerHTML = `<i class="fa-solid fa-file-circle-check"></i> <span>Dựa trên tài liệu: <strong>${referencedFiles.map(f => this.escapeHtml(f)).join(", ")}</strong></span>`;
+        } else if (existingBadge) {
+            existingBadge.remove();
+        }
+    }
+
+    updateBotWebBadge(wrapperDiv, isWebSearched) {
+        if (!wrapperDiv) return;
+        let existingBadge = wrapperDiv.querySelector(".bot-msg-web-badge");
+        if (isWebSearched) {
+            if (!existingBadge) {
+                existingBadge = document.createElement("div");
+                existingBadge.className = "bot-msg-web-badge";
+                wrapperDiv.insertBefore(existingBadge, wrapperDiv.firstChild);
+            }
+            existingBadge.innerHTML = `<i class="fa-solid fa-globe"></i> <span>Thông tin được tổng hợp từ <strong>Internet</strong> (ngoài tài liệu PTIT)</span>`;
         } else if (existingBadge) {
             existingBadge.remove();
         }
@@ -1377,6 +1414,7 @@ class PTITChatApp {
             }
         } else {
             this.updateBotReferencedBadge(wrapperDiv, msg.referenced_files);
+            this.updateBotWebBadge(wrapperDiv, msg.web_searched);
             this.renderBotMarkdownIntoBubble(bubbleDiv, msg.content || "", true);
         }
 
@@ -1465,6 +1503,7 @@ class PTITChatApp {
 
         // Dừng giọng nói bot đang đọc nếu có
         this.stopCurrentSpeech();
+        this.isWebSearching = false;
         // Mở khóa sẵn phần tử Audio chính ngay trong thao tác gửi câu hỏi (user gesture)
         // để khi LLM trả lời xong sau > 5 giây, Chrome vẫn cho phép phát tự động
         this.unlockBotAudioPlayer();
@@ -1594,6 +1633,23 @@ class PTITChatApp {
                         botMsg.scope_used = ev.scope_used || this.currentScope;
                         botMsg.referenced_files = ev.referenced_files || [];
                         if (ev.sources) botMsg.sources = ev.sources;
+                    } else if (ev.type === "web_search_start") {
+                        this.isWebSearching = true;
+                        // Dừng ngay lập tức giọng đọc câu trả lời thiếu từ server
+                        this.stopCurrentSpeech();
+                        liveVoiceSessionToken = null;
+                        botMsg.content = "";
+                        firstChunkTime = null;
+                        if (domRefs && domRefs.bubbleDiv) {
+                            domRefs.bubbleDiv.innerHTML = `<div class="web-search-in-progress" style="display:flex;align-items:center;gap:10px;padding:8px 4px;color:var(--text-secondary);font-size:13.5px;font-style:italic;"><i class="fa-solid fa-compass fa-spin" style="color:var(--primary-color, #c81e1e);font-size:16px;"></i> <span>${this.escapeHtml(ev.message || "Tài liệu nội bộ chưa có thông tin. Đang tìm kiếm trên Internet...")}</span></div>`;
+                        }
+                        if (this.typingIndicator) {
+                            this.typingIndicator.classList.remove("hidden");
+                        }
+                        if (this.typingLabel) {
+                            this.typingLabel.textContent = ev.message || "🔍 Đang tìm kiếm thông tin trên Internet...";
+                        }
+                        this.scrollToBottom();
                     } else if (ev.type === "chunk" && ev.delta) {
                         const now = performance.now();
                         if (firstChunkTime === null) {
@@ -1606,8 +1662,8 @@ class PTITChatApp {
                             this.chatMessagesArea.scrollTop = this.chatMessagesArea.scrollHeight;
                             lastRenderTime = now;
                         }
-                        // Đọc ngay câu đầu tiên khi đang stream câu trả lời (không chờ sinh xong toàn bộ)
-                        if (this.settings.autoVoice && domRefs && domRefs.speakBtn) {
+                        // Đọc ngay câu đầu tiên khi đang stream câu trả lời (chỉ áp dụng khi KHÔNG đang tìm kiếm web)
+                        if (this.settings.autoVoice && domRefs && domRefs.speakBtn && !this.isWebSearching) {
                             if (liveVoiceSessionToken === null || this.speechSessionToken === liveVoiceSessionToken) {
                                 liveVoiceSessionToken = this.feedLiveSpeech(botMsg.content, false, domRefs.speakBtn, liveVoiceSessionToken);
                             }
@@ -1631,7 +1687,10 @@ class PTITChatApp {
                         if (ev.scope_used) botMsg.scope_used = ev.scope_used;
                         if (ev.referenced_files) botMsg.referenced_files = ev.referenced_files;
                         if (ev.sources) botMsg.sources = ev.sources;
+                        if (ev.web_searched !== undefined) botMsg.web_searched = ev.web_searched;
+                        if (ev.web_sources) botMsg.web_sources = ev.web_sources;
                         this.updateBotReferencedBadge(domRefs.wrapperDiv, botMsg.referenced_files);
+                        this.updateBotWebBadge(domRefs.wrapperDiv, botMsg.web_searched);
 
                         // Cập nhật thẻ đo tốc độ trên tin nhắn
                         if (domRefs.latencyBadge) {
@@ -1663,14 +1722,20 @@ class PTITChatApp {
             currentSession.messages.push(botMsg);
             this.saveSessions();
 
-            // Auto-voice if enabled: đẩy phần câu cuối cùng vào hàng đợi đang đọc (hoặc bắt đầu đọc nếu câu quá ngắn/từ cache)
+            // Auto-voice if enabled:
             if (this.settings.autoVoice && domRefs && domRefs.speakBtn) {
-                if (liveVoiceSessionToken === null) {
+                if (this.isWebSearching || botMsg.web_searched) {
+                    this.isWebSearching = false;
+                    // Đã sinh xong toàn bộ câu trả lời từ Web Search -> Dừng triệt để giọng đọc cũ và phát câu trả lời mới hoàn chỉnh
+                    this.stopCurrentSpeech();
+                    this.speakText(botMsg.content, domRefs.speakBtn);
+                } else if (liveVoiceSessionToken === null) {
                     this.speakText(botMsg.content, domRefs.speakBtn);
                 } else if (this.speechSessionToken === liveVoiceSessionToken) {
                     this.feedLiveSpeech(botMsg.content, true, domRefs.speakBtn, liveVoiceSessionToken);
                 }
             }
+            this.isWebSearching = false;
 
         } catch (err) {
             clearTimeout(timeoutId);
@@ -2088,6 +2153,8 @@ class PTITChatApp {
                 this.botAudioPlayer.oncanplay = null;
                 this.botAudioPlayer.pause();
                 this.botAudioPlayer.currentTime = 0;
+                this.botAudioPlayer.removeAttribute("src");
+                this.botAudioPlayer.load();
             } catch (e) { }
         }
 
@@ -2097,6 +2164,9 @@ class PTITChatApp {
                 this.currentBotAudio.onerror = null;
                 this.currentBotAudio.onplaying = null;
                 this.currentBotAudio.pause();
+                this.currentBotAudio.currentTime = 0;
+                this.currentBotAudio.removeAttribute("src");
+                this.currentBotAudio.load();
             } catch (e) { }
             this.currentBotAudio = null;
         }
@@ -2844,10 +2914,16 @@ class PTITChatApp {
             };
 
             const tryPlayAudio = async (isRetry = false) => {
-                if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+                if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) {
+                    try { audio.pause(); audio.currentTime = 0; audio.removeAttribute("src"); } catch (e) { }
+                    return;
+                }
                 try {
                     await audio.play();
-                    if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) return;
+                    if (this.speechSessionToken !== sessionToken || !this.isPlayingSentenceQueue) {
+                        try { audio.pause(); audio.currentTime = 0; audio.removeAttribute("src"); } catch (e) { }
+                        return;
+                    }
                     if (!loggedStart) {
                         loggedStart = true;
                         console.log(`[TTS] Bắt đầu phát sau ${Math.round(performance.now() - ttsStartTime)}ms`);

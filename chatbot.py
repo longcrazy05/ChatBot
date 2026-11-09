@@ -49,16 +49,11 @@ def get_genai_client(api_key=None):
 
 client = get_genai_client() if API_KEY else None
 
-# Danh sách model Vision & Chat ưu tiên (các model nhanh, ổn định đưa lên đầu, loại bỏ model gây chậm/treo)
+# Danh sách model Vision & Chat ưu tiên (3 model chính thức: 3.5 Flash-Lite mặc định, 3.6 Flash, 3.8 Flash)
 VISION_MODELS = [
-    "gemini-2.5-flash-lite",
-    "gemini-flash-lite-latest",
-    "gemini-2.5-flash",
-    "gemini-flash-latest",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3-flash-preview"
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.8-flash"
 ]
 
 

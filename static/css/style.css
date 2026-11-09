@@ -3274,6 +3274,32 @@ select option:hover,
     margin-left: 2px;
 }
 
+/* BOT WEB SEARCH BADGE (KHI TRẢ LỜI TỪ INTERNET) */
+.bot-msg-web-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    margin-bottom: 10px;
+    background: rgba(30, 144, 255, 0.12);
+    border: 1px solid rgba(30, 144, 255, 0.35);
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    max-width: 100%;
+}
+
+.bot-msg-web-badge i {
+    color: #0284c7;
+    font-size: 0.88rem;
+    flex-shrink: 0;
+}
+
+.bot-msg-web-badge strong {
+    color: #0284c7;
+    margin-left: 2px;
+}
+
 
 /* ==============================================================================
    MESSENGER-STYLE VOICE MESSAGE PLAYER
@@ -3691,6 +3717,51 @@ select option:hover,
 .inline-citation-chip:hover .cite-chip-action {
     background: var(--primary);
     border-color: var(--primary);
+    color: #ffffff;
+}
+
+/* THẺ TRÍCH DẪN NGUỒN INTERNET (WEB SEARCH) */
+.inline-web-citation-chip {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 13px;
+    border-radius: 10px;
+    background: rgba(2, 132, 199, 0.08);
+    border: 1px solid rgba(2, 132, 199, 0.28);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.86rem;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    box-sizing: border-box;
+}
+
+.inline-web-citation-chip:hover {
+    background: rgba(2, 132, 199, 0.16);
+    border-color: #0284c7;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.16);
+    color: var(--text-primary);
+}
+
+.inline-web-citation-chip .cite-chip-icon {
+    background: rgba(2, 132, 199, 0.16);
+    color: #0284c7;
+}
+
+.inline-web-citation-chip .cite-chip-action {
+    color: #0284c7;
+    border-color: rgba(2, 132, 199, 0.35);
+}
+
+.inline-web-citation-chip:hover .cite-chip-action {
+    background: #0284c7;
+    border-color: #0284c7;
     color: #ffffff;
 }
 

@@ -1,0 +1,23 @@
+# ==============================================================================
+# DANH SÁCH TÊN MIỀN ĐƯỢC PHÉP TÌM KIẾM WEB (ALLOWED DOMAINS)
+# ==============================================================================
+# Chatbot sẽ CHỈ tìm kiếm thông tin trên các tên miền được khai báo dưới đây
+# khi tài liệu nội bộ của server không có câu trả lời.
+#
+# Quy tắc:
+# - Mỗi dòng là 1 tên miền (domain)
+# - Dòng bắt đầu bằng # là ghi chú (comment) và sẽ được bỏ qua
+# - Không cần viết http://, https:// hoặc www. (hệ thống tự động chuẩn hóa)
+# - HỖ TRỢ TẤT CẢ SUBDOMAIN: Chỉ cần khai báo 'ptit.edu.vn' (hoặc '*.ptit.edu.vn')
+#   là hệ thống TỰ ĐỘNG chấp nhận MỌI trang con có đuôi '.ptit.edu.vn'
+#   (Ví dụ: it.ptit.edu.vn, clc.ptit.edu.vn, daotao.ptit.edu.vn, ai.ptit.edu.vn, ...)
+# ==============================================================================
+
+# Cổng thông tin chính thức của PTIT (đã tự động bao gồm toàn bộ *.ptit.edu.vn)
+ptit.edu.vn
+
+# Các nguồn tin tức / giáo dục uy tín (bạn có thể bỏ ghi chú # hoặc thêm bớt tùy ý)
+# vnexpress.net
+# tuoitre.vn
+# dantri.com.vn
+

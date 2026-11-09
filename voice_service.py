@@ -284,10 +284,16 @@ def transcribe_audio_gemini(audio_bytes: bytes, mime_type: str = "audio/webm", a
 
     audio_part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
 
-    response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
-        contents=[prompt, audio_part]
-    )
+    for stt_model in ["gemini-3.5-flash-lite", "gemini-3.6-flash"]:
+        try:
+            response = client.models.generate_content(
+                model=stt_model,
+                contents=[prompt, audio_part]
+            )
+            transcript = (response.text or "").strip()
+            if transcript:
+                return transcript
+        except Exception:
+            continue
 
-    transcript = (response.text or "").strip()
-    return transcript
+    return ""

@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 import document_parser
 import voice_service
+import web_search
 
 load_dotenv()
 app = Flask(__name__)
@@ -157,28 +158,15 @@ _http_adapter = HTTPAdapter(pool_connections=20, pool_maxsize=30, max_retries=1)
 _HTTP_SESSION.mount("https://", _http_adapter)
 _HTTP_SESSION.mount("http://", _http_adapter)
 
-# Danh sách các model thực tế tốc độ cao nhất trên Google Generative Language API
+# Danh sách 3 model chính thức trên Google Generative Language API
 FALLBACK_MODELS = [
-    "gemini-2.5-flash-lite",
-    "gemini-flash-lite-latest",
-    "gemini-2.0-flash-lite",
-    "gemini-2.0-flash",
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash",
-    "gemini-flash-latest",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.8-flash",
 ]
 
-# Ánh xạ các tên model ảo từ giao diện sang tên model API thực tế để tránh lỗi 404 làm chậm 1-2s
-MODEL_ALIAS_MAP = {
-    "gemini-3.1-flash-lite": "gemini-2.5-flash-lite",
-    "gemini-3.5-flash-lite": "gemini-2.5-flash-lite",
-    "gemini-3.5-flash": "gemini-2.5-flash",
-    "gemini-3.6-flash": "gemini-2.5-flash",
-    "gemini-3.7-flash": "gemini-2.5-flash",
-    "gemini-3.8-flash": "gemini-2.5-flash",
-    "gemini-pro-latest": "gemini-2.5-flash",
-}
+# Không sử dụng alias - gọi trực tiếp chính xác tên model Google API
+MODEL_ALIAS_MAP = {}
 
 # Ghi nhớ các model bị 404 (loại bỏ vĩnh viễn), model bị 429 (tạm nghỉ 60s), model không hỗ trợ thinkingConfig + Sticky Model
 _dead_models_404 = set()
@@ -741,19 +729,20 @@ def _resolve_and_order_models(preferred_model=None):
             continue
         filtered.append(m)
 
-    return filtered if filtered else ["gemini-flash-lite-latest", "gemini-2.0-flash"]
+    return filtered if filtered else ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
 
 
 def _build_gemini_payload(prompt, clean_model):
-    """Tạo payload tối ưu tốc độ (tắt suy nghĩ ngầm thinkingBudget=0 với dòng model hỗ trợ để phản hồi tức thì)."""
+    """Tạo payload tối ưu tốc độ (tắt hoặc giảm suy nghĩ ngầm để phản hồi tức thì)."""
     gen_cfg = {
         "temperature": 0.1,
         "maxOutputTokens": 1800
     }
-    if clean_model not in _no_thinking_config_models and any(
-        k in clean_model for k in ["2.5", "3.", "3-", "flash-lite-latest", "flash-latest"]
-    ):
-        gen_cfg["thinkingConfig"] = {"thinkingBudget": 0}
+    if clean_model not in _no_thinking_config_models:
+        if "3.8" in clean_model:
+            gen_cfg["thinkingConfig"] = {"thinkingLevel": "low"}
+        else:
+            gen_cfg["thinkingConfig"] = {"thinkingBudget": 0}
     return {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": gen_cfg
@@ -1303,6 +1292,14 @@ NGUYÊN TẮC BẮT BUỘC:
    - Khi câu hỏi yêu cầu SO SÁNH (ví dụ so sánh học phí giữa các năm 2025 và 2026, hoặc so sánh giữa các khóa/hệ): Trình bày bảng so sánh Markdown trực quan, chi tiết từng hệ đào tạo/ngành qua các năm và phân tích mức chênh lệch cụ thể (tăng/giảm bao nhiêu).
    - Nếu tài liệu có thông tin: Trả lời ngắn gọn, đầy đủ, mạch lạc.
    - Nếu tài liệu chỉ có thông tin MỘT PHẦN (ví dụ: có vị trí tòa nhà KTX B2 trên sơ đồ nhưng không có bảng giá phòng hay điều kiện nội trú): Hãy nêu rõ những thông tin có trong tài liệu, và thông báo rõ phần thông tin chưa có trong tài liệu kèm hướng dẫn liên hệ phòng ban phụ trách (Phòng Chính trị & Công tác sinh viên tại Nhà A1, Ban quản lý KTX...).
+   - NGUYÊN TẮC VỀ MÔN HỌC GIẢNG DẠY CỦA GIẢNG VIÊN:
+     + Nếu câu hỏi hỏi cụ thể về "dạy môn gì", "dạy những môn nào", "các môn giảng dạy" của một Thầy/Cô:
+     + Trong file `giang_vien.pdf` chỉ có thông tin chung về "Chuyên ngành giảng dạy" (ví dụ: Công nghệ thông tin), KHÔNG CÓ danh sách các môn học cụ thể.
+     + Do đó, bạn BẮT BUỘC phải nêu rõ: "Hiện tại tài liệu nội bộ chỉ ghi nhận chuyên ngành giảng dạy chung là [Tên chuyên ngành] mà chưa liệt kê chi tiết tên từng môn học cụ thể do Thầy/Cô giảng dạy."
+   - NGUYÊN TẮC KIỂM TRA THỰC THỂ BẮT BUỘC (CHỐNG BỊA NGUỒN & CHỐNG DÙNG KIẾN THỨC NGOÀI TÀI LIỆU):
+     + Nếu người dùng hỏi về một cá nhân/giảng viên cụ thể (ví dụ: "Hoàng Mạnh Cường"), một trang web/tên miền cụ thể (ví dụ: "it.ptit.edu.vn"), hoặc một đối tượng cụ thể mà tên đó HOÀN TOÀN KHÔNG XUẤT HIỆN trong dữ liệu ngữ cảnh ở trên:
+       * TUYỆT ĐỐI KHÔNG tự suy diễn hoặc lấy kiến thức bên ngoài tài liệu để trả lời!
+       * BẮT BUỘC trả lời rằng tài liệu hiện có chưa có thông tin về đối tượng/vấn đề này (để hệ thống tự động kích hoạt tìm kiếm Internet).
    {no_info_rule}
 
 2. ĐỊNH DẠNG TRÌNH BÀY:
@@ -1316,14 +1313,69 @@ NGUYÊN TẮC BẮT BUỘC:
    - Không ghi chú debug như `[SCAN_TABLE]` hay `[TEXT]` trong câu trả lời.
 {user_docs_instruction}
 5. MỤC TRÍCH DẪN NGUỒN TÀI LIỆU Ở CUỐI CÂU TRẢ LỜI (BẮT BUỘC):
-   - Khi câu trả lời được trích xuất từ tài liệu ngữ cảnh ở trên, BẮT BUỘC phải có mục trích dẫn ở cuối cùng của câu trả lời theo ĐÚNG định dạng Mẫu 1 dưới đây:
+   - Khi và CHỈ KHI câu trả lời thực sự lấy thông tin từ tài liệu ngữ cảnh ở trên, mới viết mục trích dẫn ở cuối cùng theo ĐÚNG định dạng Mẫu 1:
    📌 **Nguồn trích dẫn:**
    - 📄 Trang <số_trang> - File: <tên_file_gốc> (<Tên văn bản>)
    - Ví dụ chuẩn:
    📌 **Nguồn trích dẫn:**
    - 📄 Trang 3 - File: hp_2025.pdf (Quyết định 1120/QĐ-HV Mức thu học phí năm học 2025-2026)
    - Mỗi trang trích dẫn viết trên 1 dòng gạch đầu dòng riêng biệt. CHỈ liệt kê đúng trang và file thực sự chứa thông tin dùng để trả lời câu hỏi.
-   - QUAN TRỌNG: Nếu tài liệu hoàn toàn không có thông tin hoặc chưa có đủ dữ liệu để trả lời câu hỏi thì TUYỆT ĐỐI KHÔNG viết mục '📌 Nguồn trích dẫn' và KHÔNG liệt kê bất kỳ file/trang nào."""
+   - CẤM TUYỆT ĐỐI: Nếu tài liệu hoàn toàn không có thông tin hoặc không đề cập đến thực thể được hỏi thì TUYỆT ĐỐI KHÔNG ĐƯỢC viết mục '📌 Nguồn trích dẫn' và KHÔNG liệt kê bất kỳ file/trang nào."""
+
+
+def build_web_rag_prompt(question: str, web_context: str, history=None, internal_info=None) -> str:
+    """Prompt chuyên dụng khi trả lời từ kết quả tìm kiếm web (hỗ trợ cả trường hợp bổ sung thông tin thiếu)."""
+    history_prompt = ""
+    if history and isinstance(history, list) and len(history) > 0:
+        h_lines = []
+        for h in history[-3:]:
+            role = "Người dùng" if h.get("role") == "user" else "Trợ lý"
+            cnt = h.get("content", "").strip()
+            if cnt:
+                h_lines.append(f"{role}: {cnt[:400]}")
+        if h_lines:
+            history_prompt = "LỊCH SỬ HỘI THOẠI:\n" + "\n".join(h_lines) + "\n\n"
+
+    internal_section = ""
+    is_supplement = bool(internal_info and not _is_no_info_response(internal_info))
+    if is_supplement:
+        clean_internal = _strip_all_citations(internal_info)
+        internal_section = f"""THÔNG TIN ĐÃ CÓ TỪ CƠ SỞ DỮ LIỆU NỘI BỘ PTIT:
+{clean_internal}
+
+"""
+
+    if is_supplement:
+        rule1 = """1. BẮT BUỘC kết hợp thông tin từ cơ sở dữ liệu nội bộ ở trên và thông tin chi tiết tìm thấy từ website chính thức của Học viện PTIT để trả lời trọn vẹn câu hỏi:
+- Mở đầu bằng:
+📌 **Theo cơ sở dữ liệu nội bộ và thông tin bổ sung từ Cổng thông tin Học viện PTIT (clc.ptit.edu.vn / it.ptit.edu.vn), thông tin như sau:**
+- Trình bày rõ thông tin học vị/chức vụ/đơn vị công tác (nếu có từ tài liệu nội bộ).
+- Cung cấp danh sách các môn học cụ thể do Thầy/Cô phụ trách giảng dạy được ghi nhận trên trang web của Học viện."""
+    else:
+        rule1 = """1. BẮT BUỘC mở đầu câu trả lời bằng thông báo rõ ràng cho người dùng theo đúng mẫu sau:
+📌 **Tài liệu nội bộ PTIT hiện chưa ghi nhận thông tin về nội dung này.** Hệ thống đã tự động tra cứu bổ sung trên Internet để hỗ trợ bạn:
+*(⚠️ Lưu ý: Thông tin dưới đây được tổng hợp từ Internet, không phải văn bản chính thức của Học viện PTIT. Vui lòng xác minh lại nếu cần)*"""
+
+    return f"""Bạn là Trợ lý Ảo AI của Học viện Công nghệ Bưu chính Viễn thông (PTIT).
+{internal_section}KẾT QUẢ TÌM KIẾM TỪ INTERNET ĐỂ THAM KHẢO (CÁC TRANG WEB CHÍNH THỨC CỦA PTIT):
+
+{web_context}
+
+{history_prompt}CÂU HỎI CỦA NGƯỜI DÙNG: {question}
+
+NGUYÊN TẮC BẮT BUỘC:
+{rule1}
+
+2. TẬP TRUNG CHÍNH XÁC VÀO THỰC THỂ ĐƯỢC HỎI:
+   - Nếu câu hỏi về một cá nhân/giảng viên cụ thể: Chỉ trả lời đúng thông tin về người có tên khớp chính xác.
+   - TUYỆT ĐỐI KHÔNG nhận nhầm sang người khác trùng họ hoặc trùng tên đệm.
+   - Nếu kết quả tìm kiếm có người khớp chính xác, hãy trình bày rõ: Chức danh/Học vị, Khoa/Bộ môn, Email liên hệ, Môn học giảng dạy (nếu nguồn có ghi nhận).
+   - Nếu kết quả tìm kiếm chưa nêu rõ môn học cụ thể, hãy nêu rõ rằng trang thông tin hiện tại chưa ghi chi tiết môn giảng dạy của thầy/cô.
+
+3. KHÔNG tự bịa thêm thông tin ngoài những gì có trong kết quả tìm kiếm.
+4. TUYỆT ĐỐI KHÔNG gắn mục "📌 Nguồn trích dẫn" kiểu tài liệu nội bộ — hệ thống sẽ tự động gắn link nguồn web ở phía dưới.
+5. Trả lời bằng tiếng Việt, văn phong thân thiện, ngắn gọn, gạch đầu dòng rõ ràng.
+6. KHÔNG sử dụng ký hiệu LaTeX toán học."""
 
 
 def generate_llm_answer(question, context_str, custom_api_key=None, preferred_model=None, history=None, has_user_docs=False, user_files=None, scope="hybrid"):
@@ -1413,6 +1465,10 @@ def clean_llm_response(text):
 REFUSAL_PHRASES = [
     "chưa có thông tin",
     "không có thông tin",
+    "chưa ghi nhận thông tin",
+    "không ghi nhận thông tin",
+    "chưa được ghi nhận",
+    "không được ghi nhận",
     "chưa chứa đầy đủ thông tin",
     "không chứa đầy đủ thông tin",
     "chưa có đầy đủ thông tin",
@@ -1434,13 +1490,69 @@ REFUSAL_PHRASES = [
     "không đủ dữ liệu",
     "nằm ngoài phạm vi",
     "chưa được cung cấp trong",
-    "không tìm thấy dữ liệu"
+    "không tìm thấy dữ liệu",
+    "không nằm trong danh sách",
+    "không xuất hiện trong danh sách",
+    "chưa cập nhật thông tin"
 ]
 
 REFUSAL_REGEX_PATTERNS = [
-    re.compile(r"(?:chưa|không)\s+(?:có|chứa|tìm\s+thấy|được\s+cung\s+cấp|đề\s+cập)(?:\s+đầy\s+đủ|\s+đủ|\s+chi\s+tiết|\s+cụ\s+thể)*\s*(?:thông\s+tin|dữ\s+liệu)", re.IGNORECASE),
-    re.compile(r"tài\s+liệu.*?(?:chưa|không)\s+(?:có|đủ|chứa|đề\s+cập).*?(?:để\s+trả\s+lời|thông\s+tin|dữ\s+liệu)", re.IGNORECASE),
+    re.compile(r"(?:chưa|không)\s+(?:có|chứa|tìm\s+thấy|được\s+cung\s+cấp|đề\s+cập|ghi\s+nhận)(?:\s+đầy\s+đủ|\s+đủ|\s+chi\s+tiết|\s+cụ\s+thể)*\s*(?:thông\s+tin|dữ\s+liệu)", re.IGNORECASE),
+    re.compile(r"(?:tài\s+liệu|cơ\s+sở\s+dữ\s+liệu|danh\s+sách).*?(?:chưa|không)\s+(?:có|đủ|chứa|đề\s+cập|ghi\s+nhận).*?(?:để\s+trả\s+lời|thông\s+tin|dữ\s+liệu|giảng\s+viên)", re.IGNORECASE),
 ]
+
+CITE_SPLIT_PATTERN = re.compile(
+    r"(?:\n+\s*---\s*)?\n*(?:[#*>\-\s]*📌\s*)?\*{0,2}Nguồn(?:\s+tài\s+liệu|\s+từ\s+Internet)?(?:\s+trích\s+dẫn|\s+tham\s+khảo)?\*{0,2}\s*:?\*{0,2}\s*\n",
+    flags=re.IGNORECASE
+)
+
+
+def _strip_all_citations(text: str) -> str:
+    """Xóa triệt để mọi khối trích dẫn và các dòng bullet trích dẫn khỏi văn bản."""
+    if not text:
+        return ""
+    body = CITE_SPLIT_PATTERN.split(text, maxsplit=1)[0].strip()
+    # Xóa mọi dòng trích dẫn lẻ kiểu "- 📄 Trang ... - File: ..." (có hoặc không có icon 📄)
+    body = re.sub(
+        r"^\s*[-*•+]?\s*(?:📄\s*)?\*{0,2}Trang\s+[\d,\s\-và]+[-–—|•,]\s*\*{0,2}(?:File\s*:?\s*)?[A-Za-z0-9_.\-]+\.[A-Za-z0-9]+.*$",
+        "",
+        body,
+        flags=re.IGNORECASE | re.MULTILINE
+    ).strip()
+    # Xóa tiêu đề "📌 Nguồn trích dẫn:" nếu nằm ở cuối văn bản
+    body = re.sub(
+        r"(?:\n+\s*---\s*)?\n*[#*>\-\s]*📌\s*\*{0,2}Nguồn[\s\S]*$",
+        "",
+        body,
+        flags=re.IGNORECASE
+    ).strip()
+    body = re.sub(r"(?:\n\s*---\s*)+\s*$", "", body.rstrip())
+    return body
+
+
+def _is_queried_entity_missing_in_context(question: str, context_str: str) -> bool:
+    """
+    Kiểm tra nhanh xem câu hỏi có đang hỏi về một thực thể cụ thể (tên giảng viên, tên miền web)
+    mà hoàn toàn KHÔNG tồn tại trong ngữ cảnh tài liệu nội bộ hay không.
+    Nếu không tồn tại -> Chuyển thẳng sang Web Search Fallback (không chờ LLM sinh câu từ chối hoặc bịa nguồn).
+    """
+    if not question:
+        return False
+    ctx_lower = (context_str or "").lower()
+
+    # 1. Kiểm tra nếu người dùng hỏi về một tên miền / trang web cụ thể (vd: it.ptit.edu.vn)
+    queried_domains = web_search.extract_queried_domains(question)
+    for dom in queried_domains:
+        if dom.lower() not in ctx_lower:
+            return True
+
+    # 2. Kiểm tra nếu người dùng hỏi về một giảng viên / thầy / cô cụ thể (vd: thầy Hoàng Mạnh Cường)
+    lecturer_name = web_search.extract_queried_lecturer_name(question)
+    if lecturer_name:
+        if lecturer_name.lower() not in ctx_lower:
+            return True
+
+    return False
 
 
 def _is_no_info_response(text):
@@ -1451,12 +1563,7 @@ def _is_no_info_response(text):
     if not text:
         return True
 
-    cite_split_pattern = re.compile(
-        r"(?:\n+---\s*)?\n*(?:📌\s*)?\*{0,2}Nguồn(?:\s+tài\s+liệu)?(?:\s+trích\s+dẫn|\s+tham\s+khảo)?\s*:?\*{0,2}\s*\n",
-        flags=re.IGNORECASE
-    )
-    body = cite_split_pattern.split(text, maxsplit=1)[0].strip()
-    body = re.sub(r"^\s*[-*•]?\s*📄\s*Trang\s+\d+\s*[-–—|]\s*File:.*$", "", body, flags=re.IGNORECASE | re.MULTILINE).strip()
+    body = _strip_all_citations(text)
     body_lower = body.lower()
 
     has_refusal = any(p in body_lower for p in REFUSAL_PHRASES) or any(rx.search(body_lower) for rx in REFUSAL_REGEX_PATTERNS)
@@ -1469,7 +1576,7 @@ def _is_no_info_response(text):
     bullet_lines = re.findall(r"^\s*[-*•+]\s+.+", body, flags=re.MULTILINE)
 
     first_para_refusal = any(p in first_para for p in REFUSAL_PHRASES) or any(rx.search(first_para) for rx in REFUSAL_REGEX_PATTERNS)
-    if first_para_refusal and not has_markdown_table and len(bullet_lines) == 0:
+    if first_para_refusal and not has_markdown_table and (len(bullet_lines) == 0 or len(body) < 600):
         return True
 
     if len(body) < 680 and not has_markdown_table and len(bullet_lines) == 0:
@@ -1478,7 +1585,40 @@ def _is_no_info_response(text):
     return False
 
 
-def ensure_answer_citations(text, ptit_docs=None, user_docs=None, effective_scope="ptit_only"):
+PARTIAL_MISSING_INFO_PATTERNS = [
+    re.compile(r"(?:tuy\s+nhiên|nhưng|mặc\s+dù|hiện\s+tại|hiện\s+nay).*?(?:chưa|không)\s+(?:liệt\s+kê|ghi\s+nhận|cung\s+cấp|đề\s+cập|có|nêu)(?:\s+chi\s+tiết|\s+cụ\s+thể)*\s*(?:tên\s+từng\s+môn|môn\s+học|danh\s+sách|thông\s+tin|chi\s+tiết)?", re.IGNORECASE),
+    re.compile(r"chỉ\s+ghi\s+nhận.*?(?:mà|nhưng|tuy\s+nhiên)\s+(?:chưa|không)", re.IGNORECASE),
+    re.compile(r"(?:chưa|không)\s+(?:thể\s+cung\s+cấp|liệt\s+kê|ghi\s+nhận|cung\s+cấp|đề\s+cập|nêu|có)(?:\s+cho\s+bạn)?(?:\s+chi\s+tiết|\s+cụ\s+thể)*\s*(?:về\s+môn|tên\s+từng\s+môn|môn\s+học|thông\s+tin\s+cá\s+nhân|thông\s+tin\s+chi\s+tiết|danh\s+sách)", re.IGNORECASE),
+    re.compile(r"(?:tài\s+liệu|dữ\s+liệu).*?(?:chưa|không)\s+(?:liệt\s+kê|ghi\s+nhận|nêu\s+rõ|đề\s+cập).*?(?:môn\s+học|chi\s+tiết|cụ\s+thể)", re.IGNORECASE),
+]
+
+
+def _has_missing_info_admission(text: str, question: str = "") -> bool:
+    """
+    Kiểm tra xem câu trả lời có chứa các câu thừa nhận thiếu thông tin chi tiết hay không
+    (Ví dụ: có chức vụ nhưng thiếu danh sách môn học, hoặc không có thông tin chi tiết về người được hỏi).
+    Nếu có -> Kích hoạt Web Search Fallback để bổ sung thông tin từ website chính thức của PTIT.
+    """
+    if not text:
+        return True
+    body = _strip_all_citations(text)
+    for rx in PARTIAL_MISSING_INFO_PATTERNS:
+        if rx.search(body):
+            return True
+
+    # Nếu người dùng hỏi cụ thể về môn học mà câu trả lời chỉ có chuyên ngành chung và chưa có danh sách môn cụ thể
+    if question:
+        is_asking_subjects = bool(re.search(r"\b(?:dạy\s+(?:những\s+)?môn|môn\s+(?:gì|nào|học)|môn\s+phụ\s+trách|giảng\s+dạy\s+môn)\b", question, re.IGNORECASE))
+        if is_asking_subjects:
+            body_lower = body.lower()
+            if "chuyên ngành giảng dạy" in body_lower or "chuyên ngành" in body_lower:
+                has_concrete_subjects = any(w in body_lower for w in ["c++", "giải thuật", "hệ điều hành", "lập trình hướng đối tượng", "lập trình web", "môn học:", "danh sách môn", "các môn:"])
+                if not has_concrete_subjects:
+                    return True
+    return False
+
+
+def ensure_answer_citations(text, ptit_docs=None, user_docs=None, effective_scope="ptit_only", question=""):
     """
     Chuẩn hóa hoặc tự động bổ sung mục '📌 **Nguồn trích dẫn:**' ở cuối câu trả lời theo đúng Mẫu 1:
     - 📄 Trang xx - File: yy (Tên văn bản)
@@ -1495,19 +1635,20 @@ def ensure_answer_citations(text, ptit_docs=None, user_docs=None, effective_scop
         for d in user_docs if d.get("filename")
     }
 
-    cite_split_pattern = re.compile(
-        r"(?:\n+---\s*)?\n*(?:📌\s*)?\*{0,2}Nguồn(?:\s+tài\s+liệu)?(?:\s+trích\s+dẫn|\s+tham\s+khảo)?\s*:?\*{0,2}\s*\n",
-        flags=re.IGNORECASE
-    )
-
-    parts = cite_split_pattern.split(text, maxsplit=1)
-    body_text = parts[0].strip()
+    parts = CITE_SPLIT_PATTERN.split(text, maxsplit=1)
+    body_text = _strip_all_citations(parts[0])
     raw_cite_block = parts[1].strip() if len(parts) > 1 else ""
 
     # Nếu câu trả lời là thông báo không có thông tin -> xóa bỏ mọi trích dẫn sai (nếu có) và trả về ngay
-    if _is_no_info_response(body_text):
-        clean_body = re.sub(r"(?:\n\s*---\s*)+\s*$", "", body_text.rstrip())
-        return clean_body, []
+    if _is_no_info_response(text) or _is_no_info_response(body_text):
+        return body_text, []
+
+    # Nếu câu hỏi hỏi về thực thể cụ thể (tên giảng viên / tên miền) mà thực thể đó không hề có trong tài liệu -> không gắn trích dẫn giả
+    all_docs_text = "\n".join(
+        [(d.get("content") or "") for d in ptit_docs] + [(d.get("content") or "") for d in user_docs]
+    )
+    if question and _is_queried_entity_missing_in_context(question, all_docs_text):
+        return body_text, []
 
     cited_items = []
     seen_cite_keys = set()
@@ -1603,16 +1744,14 @@ def ensure_answer_citations(text, ptit_docs=None, user_docs=None, effective_scop
                 _add_citation(d.get("source"), d.get("page", 1))
 
     if not cited_items:
-        clean_body = re.sub(r"(?:\n\s*---\s*)+\s*$", "", body_text.rstrip())
-        return clean_body, []
+        return body_text, []
 
     cite_lines = [
         f"- 📄 Trang {item['page']} - File: {item['file']} ({item['title']})"
         for item in cited_items
     ]
-    clean_body = re.sub(r"(?:\n\s*---\s*)+\s*$", "", body_text.rstrip())
     formatted_cite_section = "\n\n---\n📌 **Nguồn trích dẫn:**\n" + "\n".join(cite_lines)
-    final_text = clean_body + formatted_cite_section
+    final_text = body_text + formatted_cite_section
     return final_text, cited_items
 
 
@@ -2020,7 +2159,11 @@ def _retrieve_rag_context(question, session_id, scope, top_k, custom_api_key, us
             "học bổng", "học phí", "ký túc xá", "ktx", "miễn giảm", "miễn học", "miễn thi",
             "quy đổi", "tiếng anh", "ielts", "toeic", "thạc sĩ", "giảng viên", "câu lạc bộ", "clb"
         ]
-        if not any(t in q_lower for t in explicit_topics):
+        has_specific_entity = bool(
+            web_search.extract_queried_domains(question)
+            or web_search.extract_queried_lecturer_name(question)
+        )
+        if not has_specific_entity and not any(t in q_lower for t in explicit_topics):
             recent_text = " ".join(
                 (h.get("content") or "")[:300].lower()
                 for h in history[-3:]
@@ -2359,31 +2502,82 @@ def chat():
         question, session_id, scope, top_k, custom_api_key, user_files=user_files, history=history
     )
 
-    answer, model_used, error_msg = generate_llm_answer(
-        question=question,
-        context_str=context_str,
-        custom_api_key=custom_api_key,
-        preferred_model=preferred_model,
-        history=history,
-        has_user_docs=bool(user_docs),
-        user_files=user_files,
-        scope=effective_scope
-    )
+    entity_missing = _is_queried_entity_missing_in_context(question, context_str)
+    skip_local_llm = bool(entity_missing and effective_scope != "user_only" and web_search.is_web_search_available())
 
     is_fallback = False
-    if not answer:
-        print(f"[!] LLM không phản hồi ({error_msg}), chuyển sang chế độ dự phòng an toàn...")
-        answer = safe_fallback_answer(question, ptit_docs or user_docs)
-        model_used = "PTIT Safe Engine (Dự phòng)"
-        is_fallback = True
+    model_used = None
+    clean_answer = ""
 
-    clean_answer = clean_llm_response(answer)
-    clean_answer, sources_list = ensure_answer_citations(
-        clean_answer, ptit_docs=ptit_docs, user_docs=user_docs, effective_scope=effective_scope
+    if not skip_local_llm:
+        answer, model_used, error_msg = generate_llm_answer(
+            question=question,
+            context_str=context_str,
+            custom_api_key=custom_api_key,
+            preferred_model=preferred_model,
+            history=history,
+            has_user_docs=bool(user_docs),
+            user_files=user_files,
+            scope=effective_scope
+        )
+        if not answer:
+            print(f"[!] LLM không phản hồi ({error_msg}), chuyển sang chế độ dự phòng an toàn...")
+            answer = safe_fallback_answer(question, ptit_docs or user_docs)
+            model_used = "PTIT Safe Engine (Dự phòng)"
+            is_fallback = True
+        clean_answer = clean_llm_response(answer)
+
+    # ===========================================================================
+    # WEB SEARCH FALLBACK: Tìm kiếm web khi tài liệu nội bộ không có thông tin
+    # ===========================================================================
+    web_searched = False
+    web_sources = []
+    needs_web_search = bool(
+        (skip_local_llm or _is_no_info_response(clean_answer) or _has_missing_info_admission(clean_answer, question))
+        and effective_scope != "user_only"
+        and web_search.is_web_search_available()
     )
+    if needs_web_search:
+        print(f"[*] Web Search Fallback: Tài liệu nội bộ không đủ thông tin, đang tìm kiếm web cho: '{question[:80]}'")
+        web_results = web_search.search_web(question, num_results=3)
+        if web_results:
+            web_context = web_search.build_web_context(web_results)
+            web_prompt = build_web_rag_prompt(question, web_context, history, internal_info=clean_answer)
+            active_key_ws = custom_api_key.strip() if (custom_api_key and custom_api_key.strip()) else API_KEY
+            models_to_try_ws = _resolve_and_order_models(preferred_model)
+            web_answer = None
+            for model_name_ws in models_to_try_ws:
+                web_answer, web_err_ws = call_gemini_rest_api(web_prompt, model_name_ws, active_key_ws, timeout=8.5)
+                if web_answer:
+                    model_used = model_name_ws
+                    break
+            if web_answer:
+                clean_answer = clean_llm_response(web_answer)
+                clean_answer += web_search.format_web_citations(web_results, original_query=question)
+                web_searched = True
+                web_sources = [{"title": r["title"], "url": r.get("highlight_url") or r["url"]} for r in web_results]
+                is_fallback = False
+                print(f"[✓] Web Search Fallback: Đã tổng hợp câu trả lời từ {len(web_results)} kết quả web.")
+            else:
+                print(f"[!] Web Search Fallback: LLM không tổng hợp được từ kết quả web.")
+        else:
+            print(f"[!] Web Search Fallback: Không tìm thấy kết quả web.")
+
+    if not web_searched:
+        if not clean_answer:
+            clean_answer = "Dựa trên cơ sở dữ liệu nội bộ hiện tại của Học viện Công nghệ Bưu chính Viễn thông (PTIT), hiện chưa có thông tin về nội dung bạn vừa tra cứu."
+        clean_answer, sources_list = ensure_answer_citations(
+            clean_answer, ptit_docs=ptit_docs, user_docs=user_docs, effective_scope=effective_scope, question=question
+        )
+        last_search_err = web_search.get_last_search_error()
+        if last_search_err and effective_scope != "user_only" and _is_no_info_response(clean_answer):
+            clean_answer += f"\n\n> ⚠️ **Lưu ý cấu hình Web Search:** {last_search_err}"
+    else:
+        sources_list = []
+
     referenced_files = _resolve_referenced_files(user_docs, user_files, clean_answer, effective_scope, is_referential)
 
-    if not is_fallback and cache_key:
+    if not is_fallback and not web_searched and not _is_no_info_response(clean_answer) and cache_key:
         _store_response_cache(cache_key, clean_answer, model_used, referenced_files, sources=sources_list)
 
     return jsonify({
@@ -2391,7 +2585,9 @@ def chat():
         "model_used": model_used,
         "scope_used": effective_scope,
         "referenced_files": referenced_files,
-        "sources": sources_list
+        "sources": sources_list,
+        "web_searched": web_searched,
+        "web_sources": web_sources
     })
 
 
@@ -2434,52 +2630,115 @@ def chat_stream():
         initial_refs = _resolve_referenced_files(user_docs, user_files, "", effective_scope, is_referential)
         yield f"data: {json.dumps({'type': 'meta', 'scope_used': effective_scope, 'referenced_files': initial_refs}, ensure_ascii=False)}\n\n"
 
-        # 3. Gọi Gemini Streaming SSE
+        # 3. Gọi Gemini Streaming SSE (Bỏ qua nếu phát hiện thực thể được hỏi hoàn toàn không có trong ngữ cảnh nội bộ)
         active_key = custom_api_key.strip() if (custom_api_key and custom_api_key.strip()) else API_KEY
-        system_instruction = build_rag_prompt(question, context_str, history, bool(user_docs), user_files, effective_scope)
         models_to_try = _resolve_and_order_models(preferred_model)
+
+        entity_missing = _is_queried_entity_missing_in_context(question, context_str)
+        skip_local_llm = bool(entity_missing and effective_scope != "user_only" and web_search.is_web_search_available())
 
         accumulated = []
         model_used = None
-        start_time = time.time()
-
-        for model_name in models_to_try:
-            if time.time() - start_time > 18.0:
-                break
-            try:
-                chunk_count = 0
-                for delta in stream_gemini_rest_api(system_instruction, model_name, api_key=active_key, timeout=8.5):
-                    if delta:
-                        accumulated.append(delta)
-                        chunk_count += 1
-                        yield f"data: {json.dumps({'type': 'chunk', 'delta': delta}, ensure_ascii=False)}\n\n"
-                if chunk_count > 0:
-                    model_used = model_name
-                    break
-            except Exception as stream_err:
-                if accumulated:
-                    model_used = model_name
-                    break
-                continue
-
         is_fallback = False
-        raw_full = "".join(accumulated).strip()
-        if not raw_full:
-            raw_full = safe_fallback_answer(question, ptit_docs or user_docs)
-            model_used = "PTIT Safe Engine (Dự phòng)"
-            is_fallback = True
-            yield f"data: {json.dumps({'type': 'chunk', 'delta': raw_full}, ensure_ascii=False)}\n\n"
+        raw_full = ""
+
+        if not skip_local_llm:
+            system_instruction = build_rag_prompt(question, context_str, history, bool(user_docs), user_files, effective_scope)
+            start_time = time.time()
+
+            for model_name in models_to_try:
+                if time.time() - start_time > 18.0:
+                    break
+                try:
+                    chunk_count = 0
+                    for delta in stream_gemini_rest_api(system_instruction, model_name, api_key=active_key, timeout=8.5):
+                        if delta:
+                            accumulated.append(delta)
+                            chunk_count += 1
+                            yield f"data: {json.dumps({'type': 'chunk', 'delta': delta}, ensure_ascii=False)}\n\n"
+                    if chunk_count > 0:
+                        model_used = model_name
+                        break
+                except Exception as stream_err:
+                    if accumulated:
+                        model_used = model_name
+                        break
+                    continue
+
+            raw_full = "".join(accumulated).strip()
+            if not raw_full:
+                raw_full = safe_fallback_answer(question, ptit_docs or user_docs)
+                model_used = "PTIT Safe Engine (Dự phòng)"
+                is_fallback = True
+                yield f"data: {json.dumps({'type': 'chunk', 'delta': raw_full}, ensure_ascii=False)}\n\n"
 
         clean_answer = clean_llm_response(raw_full)
-        clean_answer, sources_list = ensure_answer_citations(
-            clean_answer, ptit_docs=ptit_docs, user_docs=user_docs, effective_scope=effective_scope
+
+        # ===========================================================================
+        # WEB SEARCH FALLBACK (Streaming): Tìm kiếm web khi tài liệu nội bộ không đủ
+        # ===========================================================================
+        web_searched = False
+        web_sources = []
+        web_results_for_cite = []
+        needs_web_search = bool(
+            (skip_local_llm or _is_no_info_response(clean_answer) or _has_missing_info_admission(clean_answer, question))
+            and effective_scope != "user_only"
+            and web_search.is_web_search_available()
         )
+        if needs_web_search:
+            yield f"data: {json.dumps({'type': 'web_search_start', 'message': '🔍 Đang tìm kiếm thông tin trên Internet...'}, ensure_ascii=False)}\n\n"
+            print(f"[*] Web Search Fallback (Stream): Tìm kiếm web cho: '{question[:80]}'")
+            web_results = web_search.search_web(question, num_results=3)
+            if web_results:
+                web_results_for_cite = web_results
+                web_context = web_search.build_web_context(web_results)
+                web_prompt = build_web_rag_prompt(question, web_context, history, internal_info=clean_answer)
+                # Stream lại với kết quả web
+                web_accumulated = []
+                for wm in models_to_try:
+                    try:
+                        for delta in stream_gemini_rest_api(web_prompt, wm, api_key=active_key, timeout=8.5):
+                            if delta:
+                                web_accumulated.append(delta)
+                                yield f"data: {json.dumps({'type': 'chunk', 'delta': delta}, ensure_ascii=False)}\n\n"
+                        if web_accumulated:
+                            raw_full = "".join(web_accumulated).strip()
+                            model_used = wm
+                            web_searched = True
+                            web_sources = [{"title": r["title"], "url": r.get("highlight_url") or r["url"]} for r in web_results]
+                            is_fallback = False
+                            citation_delta = web_search.format_web_citations(web_results_for_cite, original_query=question)
+                            if citation_delta:
+                                yield f"data: {json.dumps({'type': 'chunk', 'delta': citation_delta}, ensure_ascii=False)}\n\n"
+                            break
+                    except Exception:
+                        continue
+                if not web_accumulated:
+                    print(f"[!] Web Search Fallback (Stream): LLM không stream được từ kết quả web.")
+            else:
+                print(f"[!] Web Search Fallback (Stream): Không tìm thấy kết quả web.")
+
+        clean_answer = clean_llm_response(raw_full)
+        if web_searched and web_results_for_cite:
+            clean_answer += web_search.format_web_citations(web_results_for_cite, original_query=question)
+            sources_list = []
+        else:
+            if not clean_answer:
+                clean_answer = "Dựa trên cơ sở dữ liệu nội bộ hiện tại của Học viện Công nghệ Bưu chính Viễn thông (PTIT), hiện chưa có thông tin về nội dung bạn vừa tra cứu."
+                yield f"data: {json.dumps({'type': 'chunk', 'delta': clean_answer}, ensure_ascii=False)}\n\n"
+            clean_answer, sources_list = ensure_answer_citations(
+                clean_answer, ptit_docs=ptit_docs, user_docs=user_docs, effective_scope=effective_scope, question=question
+            )
+            last_search_err = web_search.get_last_search_error()
+            if last_search_err and effective_scope != "user_only" and _is_no_info_response(clean_answer):
+                clean_answer += f"\n\n> ⚠️ **Lưu ý cấu hình Web Search:** {last_search_err}"
+                yield f"data: {json.dumps({'type': 'chunk', 'delta': f'\n\n> ⚠️ **Lưu ý cấu hình Web Search:** {last_search_err}'}, ensure_ascii=False)}\n\n"
         final_refs = _resolve_referenced_files(user_docs, user_files, clean_answer, effective_scope, is_referential)
 
-        if not is_fallback and cache_key:
+        if not is_fallback and not web_searched and not _is_no_info_response(clean_answer) and cache_key:
             _store_response_cache(cache_key, clean_answer, model_used, final_refs, sources=sources_list)
 
-        yield f"data: {json.dumps({'type': 'done', 'answer': clean_answer, 'model_used': model_used, 'scope_used': effective_scope, 'referenced_files': final_refs, 'sources': sources_list}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'answer': clean_answer, 'model_used': model_used, 'scope_used': effective_scope, 'referenced_files': final_refs, 'sources': sources_list, 'web_searched': web_searched, 'web_sources': web_sources}, ensure_ascii=False)}\n\n"
 
     headers = {
         "Cache-Control": "no-cache",
