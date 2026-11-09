@@ -241,73 +241,25 @@
                                         <span class="model-popup-header-badge">PTIT RAG</span>
                                     </div>
                                     <div class="model-popup-list">
-                                        <div class="model-popup-item selected" data-model="gemini-2.5-flash-lite"
+                                        <div class="model-popup-item selected" data-model="gemini-3.5-flash-lite"
                                             role="menuitem">
                                             <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">2.5 Flash-Lite</span>
-                                                <span class="model-badge-tag badge-recommended">Khuyên dùng • Siêu tốc
-                                                    &amp; Ổn
-                                                    định</span>
+                                                <span class="model-popup-item-name">3.5 Flash-Lite</span>
+                                                <span class="model-badge-tag badge-recommended">Mặc định • Siêu tốc &amp; Tiết kiệm Quota</span>
                                             </div>
                                             <i class="fa-solid fa-check model-popup-item-check"></i>
                                         </div>
-                                        <div class="model-popup-item" data-model="gemini-flash-lite-latest"
-                                            role="menuitem">
+                                        <div class="model-popup-item" data-model="gemini-3.6-flash" role="menuitem">
                                             <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">Flash-Lite Latest</span>
-                                                <span class="model-badge-tag badge-fast">Nhanh • Bản Lite mới
-                                                    nhất</span>
+                                                <span class="model-popup-item-name">3.6 Flash</span>
+                                                <span class="model-badge-tag badge-balanced">Cân bằng &amp; Phản hồi nhanh</span>
                                             </div>
                                             <i class="fa-solid fa-check model-popup-item-check"></i>
                                         </div>
-                                        <div class="model-popup-item" data-model="gemini-2.5-flash" role="menuitem">
+                                        <div class="model-popup-item" data-model="gemini-3.8-flash" role="menuitem">
                                             <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">2.5 Flash</span>
-                                                <span class="model-badge-tag badge-balanced">Cân bằng chất lượng &amp;
-                                                    tốc
-                                                    độ</span>
-                                            </div>
-                                            <i class="fa-solid fa-check model-popup-item-check"></i>
-                                        </div>
-                                        <div class="model-popup-item" data-model="gemini-flash-latest" role="menuitem">
-                                            <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">Flash Latest</span>
-                                                <span class="model-badge-tag badge-fast">Bản Flash tiêu chuẩn mới
-                                                    nhất</span>
-                                            </div>
-                                            <i class="fa-solid fa-check model-popup-item-check"></i>
-                                        </div>
-                                        <div class="model-popup-item" data-model="gemini-3-flash-preview"
-                                            role="menuitem">
-                                            <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">3.0 Flash Preview</span>
-                                                <span class="model-badge-tag badge-preview">Thông minh thế hệ 3.0</span>
-                                            </div>
-                                            <i class="fa-solid fa-check model-popup-item-check"></i>
-                                        </div>
-                                        <div class="model-popup-item" data-model="gemini-3.1-flash-lite-preview"
-                                            role="menuitem">
-                                            <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">3.1 Flash-Lite Preview</span>
-                                                <span class="model-badge-tag badge-preview">Bản xem trước nâng
-                                                    cao</span>
-                                            </div>
-                                            <i class="fa-solid fa-check model-popup-item-check"></i>
-                                        </div>
-                                        <div class="model-popup-item" data-model="gemini-2.0-flash" role="menuitem">
-                                            <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">2.0 Flash</span>
-                                                <span class="model-badge-tag badge-quality">Ổn định • Độ tin cậy
-                                                    cao</span>
-                                            </div>
-                                            <i class="fa-solid fa-check model-popup-item-check"></i>
-                                        </div>
-                                        <div class="model-popup-item" data-model="gemini-2.0-flash-lite"
-                                            role="menuitem">
-                                            <div class="model-popup-item-info">
-                                                <span class="model-popup-item-name">2.0 Flash-Lite</span>
-                                                <span class="model-badge-tag badge-pro">Nhanh &amp; Tiết kiệm
-                                                    Quota</span>
+                                                <span class="model-popup-item-name">3.8 Flash</span>
+                                                <span class="model-badge-tag badge-pro">Nâng cao • Tư duy sâu</span>
                                             </div>
                                             <i class="fa-solid fa-check model-popup-item-check"></i>
                                         </div>
@@ -317,14 +269,9 @@
                                 <!-- Native select giữ nguyên đồng bộ trong DOM -->
                                 <select id="quickModelSelect" class="sr-only" tabindex="-1" aria-hidden="true"
                                     style="position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px;">
-                                    <option value="gemini-2.5-flash-lite" selected>2.5 Flash-Lite (Khuyên dùng)</option>
-                                    <option value="gemini-flash-lite-latest">Flash-Lite Latest (Nhanh)</option>
-                                    <option value="gemini-2.5-flash">2.5 Flash (Cân bằng)</option>
-                                    <option value="gemini-flash-latest">Flash Latest (Tiêu chuẩn)</option>
-                                    <option value="gemini-3-flash-preview">3.0 Flash Preview</option>
-                                    <option value="gemini-3.1-flash-lite-preview">3.1 Flash-Lite Preview</option>
-                                    <option value="gemini-2.0-flash">2.0 Flash (Ổn định)</option>
-                                    <option value="gemini-2.0-flash-lite">2.0 Flash-Lite (Tiết kiệm)</option>
+                                    <option value="gemini-3.5-flash-lite" selected>3.5 Flash-Lite (Mặc định)</option>
+                                    <option value="gemini-3.6-flash">3.6 Flash (Cân bằng &amp; Nhanh)</option>
+                                    <option value="gemini-3.8-flash">3.8 Flash (Tư duy sâu)</option>
                                 </select>
                             </div>
 
@@ -417,18 +364,9 @@
                 <div class="form-group">
                     <label class="form-label" for="modelSelect">Mô hình AI Ưu tiên (LLM)</label>
                     <select id="modelSelect" class="form-control">
-                        <option value="gemini-2.5-flash-lite" selected>gemini-2.5-flash-lite (Khuyên dùng - Siêu tốc
-                            &amp; Ổn định nhất)</option>
-                        <option value="gemini-flash-lite-latest">gemini-flash-lite-latest (Bản Flash-Lite mới nhất)
-                        </option>
-                        <option value="gemini-2.5-flash">gemini-2.5-flash (Cân bằng chất lượng &amp; tốc độ)</option>
-                        <option value="gemini-flash-latest">gemini-flash-latest (Bản Flash tiêu chuẩn mới nhất)</option>
-                        <option value="gemini-3-flash-preview">gemini-3-flash-preview (Bản Flash 3.0 Preview)</option>
-                        <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview (Bản xem trước tốc
-                            độ cao)</option>
-                        <option value="gemini-2.0-flash">gemini-2.0-flash (Ổn định cao)</option>
-                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Nhanh &amp; Tiết kiệm Quota)
-                        </option>
+                        <option value="gemini-3.5-flash-lite" selected>gemini-3.5-flash-lite (Mặc định - Siêu tốc ~350 tok/s &amp; Tiết kiệm Quota)</option>
+                        <option value="gemini-3.6-flash">gemini-3.6-flash (Cân bằng chất lượng &amp; Phản hồi nhanh)</option>
+                        <option value="gemini-3.8-flash">gemini-3.8-flash (Nâng cao - Tư duy sâu &amp; Phân tích logic)</option>
                     </select>
                 </div>
 
@@ -587,7 +525,7 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- APP JAVASCRIPT -->
-    <script src="/static/js/app.js?v=33"></script>
+    <script src="/static/js/app.js?v=36"></script>
 </body>
 
 </html>
