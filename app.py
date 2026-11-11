@@ -1346,17 +1346,17 @@ def build_web_rag_prompt(question: str, web_context: str, history=None, internal
 """
 
     if is_supplement:
-        rule1 = """1. BẮT BUỘC kết hợp thông tin từ cơ sở dữ liệu nội bộ ở trên và thông tin chi tiết tìm thấy từ website chính thức của Học viện PTIT để trả lời trọn vẹn câu hỏi:
+        rule1 = """1. BẮT BUỘC kết hợp thông tin từ cơ sở dữ liệu nội bộ ở trên và thông tin chi tiết tìm thấy từ website chính thức của Học viện để trả lời trọn vẹn câu hỏi:
 - Mở đầu bằng:
-📌 **Theo cơ sở dữ liệu nội bộ và thông tin bổ sung từ Cổng thông tin Học viện PTIT (clc.ptit.edu.vn / it.ptit.edu.vn), thông tin như sau:**
+📌 **Theo cơ sở dữ liệu nội bộ và thông tin bổ sung từ Cổng thông tin PTIT (clc.ptit.edu.vn / it.ptit.edu.vn), thông tin như sau:**
 - Trình bày rõ thông tin học vị/chức vụ/đơn vị công tác (nếu có từ tài liệu nội bộ).
 - Cung cấp danh sách các môn học cụ thể do Thầy/Cô phụ trách giảng dạy được ghi nhận trên trang web của Học viện."""
     else:
         rule1 = """1. BẮT BUỘC mở đầu câu trả lời bằng thông báo rõ ràng cho người dùng theo đúng mẫu sau:
 📌 **Tài liệu nội bộ PTIT hiện chưa ghi nhận thông tin về nội dung này.** Hệ thống đã tự động tra cứu bổ sung trên Internet để hỗ trợ bạn:
-*(⚠️ Lưu ý: Thông tin dưới đây được tổng hợp từ Internet, không phải văn bản chính thức của Học viện PTIT. Vui lòng xác minh lại nếu cần)*"""
+*(⚠️ Lưu ý: Thông tin dưới đây được tổng hợp từ Internet, không phải văn bản chính thức của Học viện BCVT. Vui lòng xác minh lại nếu cần)*"""
 
-    return f"""Bạn là Trợ lý Ảo AI của Học viện Công nghệ Bưu chính Viễn thông (PTIT).
+    return f"""Bạn là Trợ lý Ảo AI của Học viện Công nghệ Bưu chính Viễn thông (Học viện BCVT).
 {internal_section}KẾT QUẢ TÌM KIẾM TỪ INTERNET ĐỂ THAM KHẢO (CÁC TRANG WEB CHÍNH THỨC CỦA PTIT):
 
 {web_context}
@@ -1602,11 +1602,24 @@ def _has_missing_info_admission(text: str, question: str = "") -> bool:
     if not text:
         return True
     body = _strip_all_citations(text)
+
+    # Nếu câu hỏi chỉ hỏi về môn học / học phần (số tín chỉ, học kỳ, tiên quyết...) và câu trả lời đã có thông tin cụ thể
+    # -> TUYỆT ĐỐI KHÔNG kích hoạt Web Search (tránh lãng phí lượt tìm kiếm khi tài liệu nội bộ đã có)
+    if question:
+        q_lower = question.lower()
+        is_course_detail_q = any(k in q_lower for k in ["môn", "học phần", "tín chỉ", "tiến trình", "khung chương trình"])
+        asks_instructor = any(k in q_lower for k in ["ai dạy", "giảng viên nào", "thầy nào", "cô nào", "ai giảng dạy", "ai phụ trách"])
+        if is_course_detail_q and not asks_instructor:
+            body_lower = body.lower()
+            has_course_info = any(k in body_lower for k in ["tín chỉ", "học kỳ", "hk", "mã môn", "tiên quyết", "chuyên ngành"])
+            if has_course_info and len(body) > 150:
+                return False
+
     for rx in PARTIAL_MISSING_INFO_PATTERNS:
         if rx.search(body):
             return True
 
-    # Nếu người dùng hỏi cụ thể về môn học mà câu trả lời chỉ có chuyên ngành chung và chưa có danh sách môn cụ thể
+    # Nếu người dùng hỏi cụ thể về giảng viên dạy môn gì mà câu trả lời chỉ có chuyên ngành chung và chưa có danh sách môn cụ thể
     if question:
         is_asking_subjects = bool(re.search(r"\b(?:dạy\s+(?:những\s+)?môn|môn\s+(?:gì|nào|học)|môn\s+phụ\s+trách|giảng\s+dạy\s+môn)\b", question, re.IGNORECASE))
         if is_asking_subjects:
@@ -2731,8 +2744,9 @@ def chat_stream():
             )
             last_search_err = web_search.get_last_search_error()
             if last_search_err and effective_scope != "user_only" and _is_no_info_response(clean_answer):
-                clean_answer += f"\n\n> ⚠️ **Lưu ý cấu hình Web Search:** {last_search_err}"
-                yield f"data: {json.dumps({'type': 'chunk', 'delta': f'\n\n> ⚠️ **Lưu ý cấu hình Web Search:** {last_search_err}'}, ensure_ascii=False)}\n\n"
+                err_notice = f"\n\n> ⚠️ **Lưu ý cấu hình Web Search:** {last_search_err}"
+                clean_answer += err_notice
+                yield f"data: {json.dumps({'type': 'chunk', 'delta': err_notice}, ensure_ascii=False)}\n\n"
         final_refs = _resolve_referenced_files(user_docs, user_files, clean_answer, effective_scope, is_referential)
 
         if not is_fallback and not web_searched and not _is_no_info_response(clean_answer) and cache_key:

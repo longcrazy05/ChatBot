@@ -2266,6 +2266,63 @@ select option:hover,
     color: var(--text-muted);
 }
 
+.form-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.speed-preset-btn {
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+    color: var(--text-secondary, #94a3b8);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.speed-preset-btn:hover {
+    border-color: var(--primary, #3b82f6);
+    color: var(--primary, #3b82f6);
+    background: rgba(59, 130, 246, 0.08);
+}
+
+.speed-preset-btn.active {
+    border-color: var(--primary, #3b82f6);
+    background: rgba(59, 130, 246, 0.18);
+    color: var(--primary, #3b82f6);
+    font-weight: 600;
+}
+
+.btn-test-speed {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: 6px;
+    border: 1px solid var(--primary, #3b82f6);
+    background: transparent;
+    color: var(--primary, #3b82f6);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-test-speed:hover {
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.btn-test-speed.speaking {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #ffffff;
+}
+
 .checkbox-label {
     display: flex;
     align-items: center;

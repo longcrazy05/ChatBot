@@ -326,7 +326,28 @@ def refine_search_query(q: str) -> str:
         dom = queried_domains[0]
         return f"Giới thiệu trang chủ {dom}"
 
-    # 3. Xóa các cụm từ đệm hội thoại
+    # 3. Phát hiện câu hỏi thủ tục sinh viên / hành chính / giấy tờ / xác nhận (cả có dấu và không dấu)
+    # Tránh để Search API trỏ sang cổng tuyển sinh thí sinh mới hoặc đề án tuyển sinh
+    student_admin_keywords = [
+        "giấy xác nhận", "giay xac nhan", "xác nhận sinh viên", "xac nhan sinh vien",
+        "kết quả học tập", "ket qua hoc tap", "bảng điểm", "bang diem",
+        "hoãn thi", "hoan thi", "vắng thi", "vang thi", "nghỉ học", "nghi hoc",
+        "thôi học", "thoi hoc", "chuyển ngành", "chuyen nganh",
+        "phúc khảo", "phuc khao", "đổi ca thi", "doi ca thi", "học lại", "hoc lai",
+        "miễn học", "mien hoc", "bảo lưu", "bao luu", "đăng ký môn", "dang ky mon",
+        "chứng nhận tốt nghiệp", "chung nhan tot nghiep", "hồ sơ sinh viên", "ho so sinh vien",
+        "sổ tay sinh viên", "so tay sinh vien"
+    ]
+    if any(k in s.lower() for k in student_admin_keywords):
+        core_terms = []
+        for k in student_admin_keywords:
+            if k in s.lower():
+                core_terms.append(k)
+        term_str = " ".join(core_terms) if core_terms else s
+        # Bổ sung từ khóa định hướng chính xác đến phòng Giáo vụ / Công tác sinh viên
+        return f"{term_str} thủ tục sinh viên giáo vụ ptit"
+
+    # 4. Xóa các cụm từ đệm hội thoại
     fillers = [
         r"\b(?:cho\s+(?:em|mình|tôi)\s+hỏi|hỏi\s+chút|bạn\s+ơi|ad\s+ơi|bot\s+ơi)\b",
         r"\b(?:thông\s+tin\s+cá\s+nhân|thông\s+tin\s+liên\s+hệ|tiểu\s+sử|profile)\b",
@@ -413,27 +434,56 @@ def _filter_relevant_results(results: list, original_query: str, num_results: in
         if other_dom_matches:
             return other_dom_matches[:num_results]
 
+    # 3. Phân loại theo ngữ cảnh câu hỏi sinh viên vs tuyển sinh
+    q_lower = original_query.lower()
+    is_student_admin = any(k in q_lower for k in [
+        "giấy xác nhận", "xác nhận", "kết quả học tập", "bảng điểm",
+        "hoãn thi", "vắng thi", "nghỉ học", "thôi học", "chuyển ngành",
+        "phúc khảo", "học lại", "miễn học", "bảo lưu", "đăng ký môn",
+        "chứng nhận tốt nghiệp", "hồ sơ sinh viên", "giáo vụ", "sinh viên"
+    ])
+    is_tuyensinh_query = any(k in q_lower for k in [
+        "tuyển sinh", "xét tuyển", "chỉ tiêu", "phương thức tuyển",
+        "điểm chuẩn vào", "thí sinh", "nguyện vọng", "học bạ"
+    ])
+
     generic_words = {
         "ptit", "học", "viện", "công", "nghệ", "bưu", "chính", "viễn", "thông",
         "sinh", "viên", "giảng", "thầy", "cô", "trường", "đại", "khoa", "ngành",
         "cho", "hỏi", "tin", "như", "thế", "nào", "ntn", "bao", "nhiêu",
-        "của", "tại", "năm", "hiện", "nay", "các", "những", "trong", "với"
+        "của", "tại", "năm", "hiện", "nay", "các", "những", "trong", "với", "thủ", "tục"
     }
     q_clean = refine_search_query(original_query).lower()
     core_words = [w for w in re.findall(r"[a-zA-ZÀ-ỹ0-9]{2,}", q_clean) if w not in generic_words]
-    if core_words:
-        scored = []
-        for r in results:
-            combined = f"{r.get('title', '')} {r.get('snippet', '')}".lower()
-            hits = sum(1 for w in core_words if w in combined)
-            if hits > 0:
-                scored.append((hits, r))
-        if scored:
-            scored.sort(key=lambda x: x[0], reverse=True)
-            max_hits = scored[0][0]
-            min_required = max(1, (max_hits + 1) // 2)
-            filtered = [item[1] for item in scored if item[0] >= min_required]
-            return filtered[:num_results]
+
+    scored = []
+    for r in results:
+        u_lower = (r.get("url") or "").lower()
+        comb = f"{r.get('title', '')} {r.get('snippet', '')}".lower()
+        score = 0
+
+        # Nếu người dùng hỏi thủ tục sinh viên / kết quả học tập nhưng kết quả lại từ cổng tuyển sinh -> trừ điểm nặng hoặc loại bỏ
+        if is_student_admin and not is_tuyensinh_query:
+            if "tuyensinh.ptit.edu.vn" in u_lower or "/tuyen-sinh" in u_lower or "đkxt" in u_lower:
+                score -= 15
+            if any(k in comb for k in ["cam nang huong dan dkxt", "đề án tuyển sinh", "thông báo phương thức tuyển sinh"]):
+                score -= 20
+            # Ưu tiên các trang giáo vụ, sinh viên, thủ tục
+            if any(good in u_lower for good in ["giaovu.ptit.edu.vn", "student.ptit.edu.vn", "daotao.ptit.edu.vn", "co-cau-to-chuc/phong-giao-vu"]):
+                score += 15
+            if any(kw in comb for kw in ["giáo vụ", "mẫu biểu", "thủ tục hành chính", "kết quả học tập", "xác nhận"]):
+                score += 8
+
+        # Khớp từ khóa cốt lõi
+        hits = sum(1 for w in core_words if w in comb)
+        score += hits * 3
+
+        if score > -5:
+            scored.append((score, r))
+
+    if scored:
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [item[1] for item in scored[:num_results]]
 
     return results[:num_results]
 
