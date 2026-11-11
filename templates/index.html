@@ -449,18 +449,26 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="voiceSelect">Giọng đọc Trợ lý</label>
-                    <select id="voiceSelect" class="form-select">
-                        <option value="female" selected>Giọng Nữ</option>
-                        <option value="male">Giọng Nam</option>
+                    <label class="form-label" for="voiceModeSelect">Chế độ đọc (Nguồn phát)</label>
+                    <select id="voiceModeSelect" class="form-control">
+                        <option value="auto" selected>Tự động (Ưu tiên trình duyệt &rarr; Dự phòng máy chủ)</option>
+                        <option value="native">Có sẵn từ trình duyệt (Web Speech API - Phát tức thì)</option>
+                        <option value="backend">Máy chủ Backend (Edge-TTS / gTTS - Giọng chuẩn tự nhiên)</option>
+                    </select>
+                    <small class="form-hint">Chọn nguồn phát âm thanh: trình duyệt của bạn hoặc máy chủ xử lý.</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="voiceSelect">Giọng đọc Trợ lý</label>
+                    <select id="voiceSelect" class="form-control">
+                        <option value="female" selected>Giọng Nữ (Hoài My - Bắc Bộ)</option>
+                        <option value="male">Giọng Nam (Nam Minh - Bắc Bộ)</option>
                     </select>
                     <div class="voice-current-status" id="voiceCurrentStatusBox">
                         <i class="fa-solid fa-microphone-lines"></i>
                         <span>Đang dùng giọng: <strong id="currentVoiceNameDisplay">Đang kiểm tra trình
                                 duyệt...</strong></span>
                     </div>
-                    <small class="form-help">Ưu tiên giọng tiếng Việt có sẵn trên trình duyệt/Windows. Nếu trình duyệt
-                        chưa có giọng phù hợp, hệ thống sẽ tạo giọng qua máy chủ.</small>
                 </div>
 
                 <div class="form-group">

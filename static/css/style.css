@@ -2180,7 +2180,8 @@ body {
     text-decoration: underline;
 }
 
-.form-control {
+.form-control,
+.form-select {
     width: 100%;
     padding: 11px 14px;
     background: var(--bg-input);
@@ -2193,7 +2194,14 @@ body {
     transition: all var(--transition-fast);
 }
 
-.form-control:focus {
+select.form-control,
+select.form-select {
+    cursor: pointer;
+    line-height: 1.5;
+}
+
+.form-control:focus,
+.form-select:focus {
     border-color: var(--primary);
     box-shadow: 0 0 0 2px var(--primary-glow);
 }

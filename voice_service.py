@@ -20,9 +20,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 AUDIO_CACHE_DIR = os.path.join(BASE_DIR, "static", "audio_cache")
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 
-# Circuit Breaker cho Edge-TTS
-EDGE_TTS_TIMEOUT = 5.0  # Cho phép tới 5s để Edge-TTS Neural voice chất lượng cao hoàn tất
-EDGE_TTS_COOLDOWN = 60  # Nếu lỗi kết nối, tạm nghỉ 60s rồi thử lại Edge-TTS
+# Circuit Breaker cho Edge-TTS (Tránh treo hệ thống khi Microsoft Bing trả về 503 hoặc timeout)
+EDGE_TTS_TIMEOUT = 4.5  # Giới hạn 4.5s cho câu dài trước khi chuyển dự phòng sang gTTS
+EDGE_TTS_COOLDOWN = 120  # Nếu lỗi, tạm ngừng thử Edge-TTS trong 2 phút để không làm chậm các câu sau
 _edge_tts_disabled_until = 0.0
 
 # Khóa theo từng file MP3 để các request trùng câu không ghi chồng lên nhau
@@ -39,7 +39,7 @@ def _get_file_lock(path):
 
 # Bảng tra từ viết tắt và thuật ngữ chuyên ngành PTIT sang văn bản phát âm tự nhiên
 PTIT_ABBREVIATIONS = [
-    (r"\bPTIT\b", "Học viện Bưu chính Viễn thông"),
+    (r"\bPTIT\b", "Học viện bưu chính viễn thông"),
     (r"\bCNTT\b", "Công nghệ thông tin"),
     (r"\bATTT\b", "An toàn thông tin"),
     (r"\bDTVT\b|\bĐTVT\b", "Điện tử viễn thông"),
@@ -76,6 +76,21 @@ PTIT_ABBREVIATIONS = [
     (r"\bTTTN\b", "Thực tập tốt nghiệp"),
     (r"\bCN\b(?=\s+[A-ZÀ-Ỹ])", "Cử nhân"),
     (r"\bKS\b(?=\s+[A-ZÀ-Ỹ])", "Kỹ sư"),
+    (r"\bQĐ-HV\b|\bQĐ/HV\b", "Quyết định Học viện"),
+    (r"\bQĐ\b(?=\s*[-/,]?\s*(?:HV|BCVT|BGD|BTTTT|\d))", "Quyết định"),
+    (r"\bTB-HV\b|\bTB/HV\b", "Thông báo Học viện"),
+    # Địa danh hành chính viết tắt (TP., T.P, TP, TX., TT.)
+    (r"\b(?:T\.P\.|TP\.|TP)\s+Hồ\s+Chí\s+Minh\b", "Thành phố Hồ Chí Minh"),
+    (r"\b(?:T\.P\.|TP\.|TP)\s+HCM\b", "Thành phố Hồ Chí Minh"),
+    (r"\b(?:T\.P\.|TP\.|TP)\s+Hà\s+Nội\b", "Thành phố Hà Nội"),
+    (r"\b(?:T\.P\.|TP\.|TP)\s+Đà\s+Nẵng\b", "Thành phố Đà Nẵng"),
+    (r"\b(?:T\.P\.|TP\.|TP)\s+Hải\s+Phòng\b", "Thành phố Hải Phòng"),
+    (r"\b(?:T\.P\.|TP\.|TP)\s+Cần\s+Thơ\b", "Thành phố Cần Thơ"),
+    (r"\b(?:T\.P\.|TP\.|TP)\s+Huế\b", "Thành phố Huế"),
+    (r"\b(?:T\.P\.|TP\.)\s*(?=[A-ZĐÀ-Ỹ])", "Thành phố "),
+    (r"\bTP\s+(?=[A-ZĐÀ-Ỹ][a-zà-ỹ]+)", "Thành phố "),
+    (r"\bTX\.\s*(?=[A-ZĐÀ-Ỹ])|\bTX\s+(?=[A-ZĐÀ-Ỹ][a-zà-ỹ]+)", "Thị xã "),
+    (r"\bTT\.\s*(?=[A-ZĐÀ-Ỹ])|\bTT\s+(?=[A-ZĐÀ-Ỹ][a-zà-ỹ]+)", "Thị trấn "),
 ]
 
 DIGIT_MAP = {
@@ -295,8 +310,9 @@ def normalize_decimals_and_units(text: str) -> str:
 
     t = re.sub(r"\b(\d+)[,.](\d+)\s*(tỷ|triệu|nghìn|tr)(?:\s*(VNĐ|VND|đ|dong|đồng))?(?=[\s,.)!?;:]|$)", repl_dec_currency, t, flags=re.IGNORECASE)
 
-    # 2. Tiền tệ viết dạng: 1 tỷ 8, 2 triệu 5
-    t = re.sub(r"\b(\d+)\s*(tỷ|triệu)\s*(\d+)(?:\s*(?:VNĐ|VND|đ|dong|đồng))?(?=[\s,.)!?;:]|$)", r"\1 \2 \3 đồng", t, flags=re.IGNORECASE)
+    # 2. Tiền tệ viết dạng: 1 tỷ 8, 2 triệu 5 (chỉ khi số sau là số đơn lẻ 1-9 và không có đơn vị nghìn/triệu/tỷ phía sau)
+    # Tránh làm hỏng các câu đã đọc chuẩn như '1 triệu 20 nghìn đồng' thành '1 triệu 20 đồng nghìn đồng'
+    t = re.sub(r"\b(\d+)\s*(tỷ|triệu)\s*([1-9])(?!\s*(?:nghìn|ngàn|trăm|triệu|tỷ|\d))\s*(?:VNĐ|VND|đ|dong|đồng)?(?=[\s,.)!?;:]|$)", r"\1 \2 \3 đồng", t, flags=re.IGNORECASE)
 
     # 3. Ký hiệu so sánh và đơn vị thời gian kỹ thuật (< 2s, <= 5s, > 100ms)
     t = re.sub(r"<=\s*(\d+)\s*s\b", r"dưới hoặc bằng \1 giây", t, flags=re.IGNORECASE)
@@ -326,15 +342,30 @@ def format_currency_match(match):
     num_str = match.group(1).replace(".", "").replace(",", "").strip()
     try:
         val = int(num_str)
-        if val >= 1_000_000:
+        if val >= 1_000_000_000:
+            ty = val // 1_000_000_000
+            du_ty = val % 1_000_000_000
+            trieu = du_ty // 1_000_000
+            res = f"{ty} tỷ"
+            if trieu > 0:
+                res += f" {trieu} triệu"
+            return res + " đồng"
+        elif val >= 1_000_000:
             trieu = val // 1_000_000
             du = val % 1_000_000
             nghin = du // 1_000
             if nghin > 0:
+                tram_nghin = nghin // 100
+                chuc_nghin = nghin % 100
+                if tram_nghin == 0 and chuc_nghin > 0:
+                    return f"{trieu} triệu không trăm {chuc_nghin} nghìn đồng"
                 return f"{trieu} triệu {nghin} nghìn đồng"
             return f"{trieu} triệu đồng"
         elif val >= 1_000:
             nghin = val // 1_000
+            tram = val % 1_000
+            if tram > 0:
+                return f"{nghin} nghìn {tram} đồng"
             return f"{nghin} nghìn đồng"
         else:
             return f"{val} đồng"
@@ -342,18 +373,95 @@ def format_currency_match(match):
         return match.group(0)
 
 
+def strip_sources_for_speech(text: str) -> str:
+    """
+    Loại bỏ hoàn toàn phần trích dẫn nguồn (cả tài liệu nội bộ lẫn tra cứu Internet)
+    và các ghi chú nguồn trong ngoặc đơn trước khi đưa vào bộ đọc TTS.
+    """
+    if not text:
+        return ""
+    s = text
+    # 1. Ghi chú nguồn trong ngoặc đơn: *(Nguồn: Tuyển sinh PTIT)*, (Nguồn: ...)
+    s = re.sub(r"[*_~]*\(\s*(?:📌|🔍)?\s*Nguồn(?:\s+[a-zA-ZÀ-ỹ]+)?\s*:[^)]+\)[*_~]*", " ", s, flags=re.IGNORECASE)
+    # 2. Toàn bộ khối nguồn ở cuối văn bản (cả tài liệu nội bộ 📌 và nguồn internet 🔍)
+    s = re.sub(r"(?:\n+\s*---\s*)?\n*[#*>\-\s]*(?:📌|🔍)?\s*\*{0,2}Nguồn(?:\s+(?:trích\s+dẫn|tham\s+khảo|tài\s+liệu|từ\s+Internet))?\s*:\*{0,2}[\s\S]*$", " ", s, flags=re.IGNORECASE)
+    # 3. Các dòng trích dẫn lẻ còn sót (📄 Trang ..., 🔗 link...)
+    s = re.sub(r"^\s*[-*•]?\s*📄\s*Trang\s+\d+.*$", " ", s, flags=re.IGNORECASE | re.MULTILINE)
+    s = re.sub(r"^\s*[-*•]?\s*🔗\s*.*$", " ", s, flags=re.IGNORECASE | re.MULTILINE)
+    s = re.sub(r"^\s*[-*•]?\s*🔍\s*.*$", " ", s, flags=re.IGNORECASE | re.MULTILINE)
+    return s
+
+
+_MAJOR_ACRONYMS = {"CNTT", "ATTT", "DTVT", "ĐTVT", "KTPM", "KHMT", "TMĐT", "CLC", "PTIT", "BCVT", "ĐTB", "GPA", "ĐRL"}
+
+
+def normalize_codes(text: str) -> str:
+    """
+    Chuẩn hóa các mã số (mã chương trình, mã ngành, mã xét tuyển, mã học phần, mã trường, CCCD, STK...)
+    thành dạng đọc từng chữ số tự nhiên để tránh TTS đọc nhầm thành kiểu tiền tệ (hàng triệu/tỷ).
+    """
+    if not text:
+        return ""
+
+    def repl_prefixed_code(m):
+        prefix = m.group(1)
+        code = m.group(2)
+        if code.upper() in _MAJOR_ACRONYMS:
+            return m.group(0)
+        has_digit = any(ch.isdigit() for ch in code)
+        if not has_digit and not code.isupper():
+            return m.group(0)
+        if code.isdigit() and len(code) == 4 and (code.startswith("19") or code.startswith("20")) and ":" not in m.group(0):
+            return m.group(0)
+
+        # Nếu mã viết dính dấu chấm (vd 7.480.202) không kèm đơn vị tiền -> gộp số để đọc từng chữ số
+        clean_code = code.replace(".", "") if re.match(r"^\d+(?:\.\d+)+$", code) else code
+        tokens = re.findall(r"[A-Za-zÀ-ỹ]+|\d+", clean_code)
+        formatted = []
+        for tok in tokens:
+            if tok.isdigit():
+                if len(tok) >= 4:
+                    formatted.append(digits_to_words(tok))
+                else:
+                    formatted.append(tok)
+            else:
+                if tok.isupper() and len(tok) <= 5 and tok.upper() not in _MAJOR_ACRONYMS:
+                    formatted.append(" ".join(list(tok.lower())))
+                else:
+                    formatted.append(tok)
+        joined = ", ".join(formatted)
+        return f"{prefix}: {joined}"
+
+    code_prefixes = (
+        r"mã\s+(?:chương\s+trình(?:\s+đào\s+tạo)?|ngành(?:\s+đào\s+tạo)?|chuyên\s+ngành|"
+        r"xét\s+tuyển|tuyển\s+sinh|học\s+phần|môn(?:\s+học)?|sinh\s+viên|học\s+viên|"
+        r"hồ\s+sơ|trường|đào\s+tạo|đơn\s+vị|bưu\s+chính|định\s+danh|giao\s+dịch|"
+        r"tra\s+cứu|lớp|khóa|tài\s+khoản|otp|pin|bảo\s+mật|thí\s+sinh|hội\s+đồng)|"
+        r"mã\s*số|mã(?=\s*[:=-])|số\s+báo\s+danh|sbd|cccd|cmnd|mssv|msv|stk|số\s+tài\s+khoản"
+    )
+    pat1 = rf"\b({code_prefixes})(?:\s*[:=-]\s*|\s+)([A-Za-z0-9][A-Za-z0-9_.-]{{1,}})\b"
+    t = re.sub(pat1, repl_prefixed_code, text, flags=re.IGNORECASE)
+
+    # Dãy số viết liền từ 6 đến 15 chữ số đứng độc lập mà KHÔNG kèm đơn vị tiền tệ/số lượng đếm
+    non_code_units = r"(?:vnđ|vnd|đồng|đ\b|triệu|tỷ|nghìn|ngàn|xu|usd|người|sinh\s+viên|thí\s+sinh|học\s+sinh|chỉ\s+tiêu|tín\s+chỉ|lượt|lần|hồ\s+sơ|điểm|giây|phút|giờ|môn|bài|trang|năm|tháng|ngày|mét|km|kg|mb|gb)"
+    pat2 = rf"\b(\d{{6,15}})\b(?!\s*{non_code_units})"
+    t = re.sub(pat2, lambda m: digits_to_words(m.group(1)), t, flags=re.IGNORECASE)
+
+    return t
+
+
 def clean_and_normalize_text(text: str) -> str:
     """
     Tiền xử lý văn bản:
-    1. Lọc bỏ Markdown (tiêu đề, bảng biểu, danh sách, links, code, latex)
-    2. Chuẩn hóa số điện thoại thành chữ số tự nhiên ngắt nhịp (chống đọc nhầm thành số triệu)
+    1. Lọc bỏ phần trích dẫn nguồn (nội bộ & Internet) và Markdown (tiêu đề, bảng biểu, danh sách, links, code, latex)
+    2. Chuẩn hóa số điện thoại & mã chương trình/mã ngành thành chữ số tự nhiên (chống đọc nhầm thành tiền)
     3. Chuẩn hóa từ viết tắt PTIT và tên trường (không lặp từ, đọc đúng 'Bưu chính Viễn thông', không bị đọc thành 'viễn đông')
     4. Chuẩn hóa số tiền và các ký hiệu toán học, tên miền website
     """
     if not text:
         return ""
 
-    s = text
+    s = strip_sources_for_speech(text)
 
     # Loại bỏ code blocks ```...``` và inline code `...`
     s = re.sub(r"```[\s\S]*?```", " ", s)
@@ -388,8 +496,9 @@ def clean_and_normalize_text(text: str) -> str:
 
     s = re.sub(r"[*_~><#]", " ", s)
 
-    # Loại bỏ thẻ HTML thừa
+    # Loại bỏ thẻ HTML và các biểu tượng emoji trang trí để giọng đọc không bị vấp/ngừng
     s = re.sub(r"<[^>]+>", " ", s)
+    s = re.sub(r"[⚠️📌🔍📄🔗✅❌🎓•]", " ", s)
 
     # 0.3. Loại bỏ phụ đề tiếng Anh trong ngoặc (không xóa tên miền website hoặc PTIT)
     s = strip_english_subtitles(s)
@@ -397,23 +506,47 @@ def clean_and_normalize_text(text: str) -> str:
     # 1. Chuẩn hóa số điện thoại thành từng cụm chữ số tự nhiên ngắt nhịp TRƯỚC KHI regex tiền tệ quét qua
     s = normalize_phone_numbers(s)
 
-    # 2. Tránh lặp và chuẩn hóa cách phát âm tên Học viện PTIT:
-    # 'Học viện Công nghệ Bưu chính Viễn thông (PTIT)' -> đọc gọn, không lặp
-    s = re.sub(r"Học\s+viện\s+(?:Công\s+nghệ\s+)?Bưu\s+chính\s+Viễn\s+thông\s*\(\s*PTIT\s*\)", "Học viện Công nghệ Bưu chính Viễn thông", s, flags=re.IGNORECASE)
-    s = re.sub(r"Cổng\s+thông\s+tin\s+(?:Học\s+viện\s+)?PTIT\b", "Cổng thông tin Bưu chính Viễn thông", s, flags=re.IGNORECASE)
-    s = re.sub(r"Học\s+viện\s+PTIT\b", "Học viện Bưu chính Viễn thông", s, flags=re.IGNORECASE)
-    # PTIT đứng riêng -> đọc là 'Bưu chính Viễn thông' để phát âm liền mạch, mượt mà, không bị ngắt P...TIT
-    s = re.sub(r"\bPTIT\b", "Bưu chính Viễn thông", s)
+    # 1.1. Chuẩn hóa mã chương trình, mã ngành, mã học phần... thành từng chữ số tự nhiên (tránh đọc nhầm thành kiểu tiền tệ)
+    s = normalize_codes(s)
 
-    # Đảm bảo 'Bưu chính' và 'Viễn thông' luôn viết chuẩn bằng dấu cách tự nhiên,
-    # tuyệt đối không có dấu gạch ngang '-' để tránh bộ đọc Google/Edge nhận nhầm thành 'viễn đông'
-    s = re.sub(r"\bBưu[\s-]+chính\b", "Bưu chính", s, flags=re.IGNORECASE)
-    s = re.sub(r"\bViễn[\s-]+thông\b", "Viễn thông", s, flags=re.IGNORECASE)
+    # 2. Tránh lặp và chuẩn hóa cách phát âm tên Học viện PTIT:
+    # Giữ cụm "bưu chính viễn thông" ở dạng thường để Edge-TTS đọc liền mạch, không bị ngắt nhịp tại chữ "Viễn"
+    s = re.sub(r"Học\s+viện\s+(?:Công\s+nghệ\s+)?Bưu\s+chính\s+Viễn\s+thông\s*\(\s*PTIT\s*\)", "Học viện Công nghệ bưu chính viễn thông", s, flags=re.IGNORECASE)
+    s = re.sub(r"Cổng\s+thông\s+tin\s+(?:Học\s+viện\s+)?PTIT\b", "Cổng thông tin bưu chính viễn thông", s, flags=re.IGNORECASE)
+    s = re.sub(r"Học\s+viện\s+PTIT\b", "Học viện bưu chính viễn thông", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bPTIT\b", "bưu chính viễn thông", s)
+
+    s = re.sub(r"\bBưu[\s-]+chính\s+Viễn[\s-]+thông\b", "bưu chính viễn thông", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bĐiện[\s-]+tử\s+Viễn[\s-]+thông\b", "điện tử viễn thông", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bBưu[\s-]+chính\b", "bưu chính", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bViễn[\s-]+thông\b", "viễn thông", s, flags=re.IGNORECASE)
 
     # 3. Xử lý ngắt dòng, bullet points để giọng nói dừng nghỉ dứt khoát giữa các mục:
     s = re.sub(r"(?<![.!?;:])\s*\n\s*[-*•+]\s*", ". ", s)
     s = re.sub(r"^\s*[-*•+]\s*", "", s, flags=re.MULTILINE)
     s = re.sub(r"(?<![.!?;:,])\s*\n", ". ", s)
+
+    # 3.1. Chuẩn hóa số hiệu văn bản hành chính (Quyết định, Thông báo, Kế hoạch... VD: 1462/QĐ-HV, 25/TB-HV, 01/NQ-CP)
+    # Dấu gạch chéo '/' ngăn cách số hiệu và ký hiệu văn bản -> chuyển thành dấu phẩy để ngắt nhịp tự nhiên (tuyệt đối không đọc là 'hoặc')
+    def _repl_doc_code(m):
+        doc_num = m.group(1)
+        doc_symbol = m.group(2)
+        clean_symbol = doc_symbol.replace("-", " ")
+        clean_symbol = re.sub(r"\bQĐ\b", "Quyết định", clean_symbol)
+        clean_symbol = re.sub(r"\bHV\b", "Học viện", clean_symbol)
+        clean_symbol = re.sub(r"\bTB\b", "Thông báo", clean_symbol)
+        clean_symbol = re.sub(r"\bKH\b", "Kế hoạch", clean_symbol)
+        clean_symbol = re.sub(r"\bNQ\b", "Nghị quyết", clean_symbol)
+        clean_symbol = re.sub(r"\bNĐ\b", "Nghị định", clean_symbol)
+        clean_symbol = re.sub(r"\bTT\b", "Thông tư", clean_symbol)
+        clean_symbol = re.sub(r"\bCT\b", "Chỉ thị", clean_symbol)
+        clean_symbol = re.sub(r"\bBCVT\b", "Bưu chính Viễn thông", clean_symbol)
+        clean_symbol = re.sub(r"\bBGDĐT\b|\bBGD\b", "Bộ Giáo dục và Đào tạo", clean_symbol)
+        clean_symbol = re.sub(r"\bBTTTT\b", "Bộ Thông tin và Truyền thông", clean_symbol)
+        return f"{doc_num}, {clean_symbol}"
+
+    s = re.sub(r"\b(\d+)\s*/\s*([A-ZĐÀ-Ỹ]{2,}(?:-[A-ZĐÀ-Ỹ0-9]+)*)\b", _repl_doc_code, s)
+    s = re.sub(r"\b(\d+)\s*/\s*(Quyết\s+định|Thông\s+báo|Kế\s+hoạch|Nghị\s+định|Nghị\s+quyết|Thông\s+tư)\b", r"\1, \2", s, flags=re.IGNORECASE)
 
     # Chuẩn hóa tiền tệ: ví dụ 15.000.000 VNĐ, 550.000 đ, 500,000 VND
     s = re.sub(r"(\d{1,3}(?:[.,]\d{3})+)\s*(?:VNĐ|VND|đ|dong|đồng)\b", format_currency_match, s, flags=re.IGNORECASE)
@@ -422,9 +555,10 @@ def clean_and_normalize_text(text: str) -> str:
     for pattern, replacement in PTIT_ABBREVIATIONS:
         s = re.sub(pattern, replacement, s)
 
-    # Đảm bảo lại một lần nữa 'Bưu chính' và 'Viễn thông' không bị dính dấu gạch ngang
-    s = re.sub(r"\bBưu[\s-]+chính\b", "Bưu chính", s, flags=re.IGNORECASE)
-    s = re.sub(r"\bViễn[\s-]+thông\b", "Viễn thông", s, flags=re.IGNORECASE)
+    # Đảm bảo lại một lần nữa 'bưu chính viễn thông' luôn viết thường liền mạch không có dấu gạch ngang
+    s = re.sub(r"\bBưu[\s-]+chính\s+Viễn[\s-]+thông\b", "bưu chính viễn thông", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bBưu[\s-]+chính\b", "bưu chính", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bViễn[\s-]+thông\b", "viễn thông", s, flags=re.IGNORECASE)
 
     # Xử lý dấu gạch chéo '/' theo ngữ cảnh đơn vị tính & tiền tệ trước
     s = re.sub(r"(?:đ|VNĐ|VND|đồng)\s*/\s*([a-zA-ZÀ-ỹ]+)", r" đồng trên mỗi \1", s, flags=re.IGNORECASE)
@@ -462,12 +596,12 @@ def clean_and_normalize_text(text: str) -> str:
 
 
 async def _synthesize_edge_tts(text: str, voice: str, output_path: str):
-    """Thực thi gọi Edge-TTS bất đồng bộ."""
-    communicate = edge_tts.Communicate(text, voice)
+    """Thực thi gọi Edge-TTS bất đồng bộ với connect_timeout ngắn tránh treo."""
+    communicate = edge_tts.Communicate(text, voice, connect_timeout=2)
     await asyncio.wait_for(communicate.save(output_path), timeout=EDGE_TTS_TIMEOUT)
 
 
-def generate_speech(text: str, voice: str = "vi-VN-HoaiMyNeural") -> dict:
+def generate_speech(text: str, voice: str = "vi-VN-HoaiMyNeural", speed: float = 1.0) -> dict:
     """
     Tạo file giọng nói MP3:
     1. Ưu tiên: Microsoft Edge-TTS (Neural Voice tiếng Việt Bắc Bộ - Hoài My / Nam Minh).

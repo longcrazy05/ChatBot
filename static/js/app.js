@@ -61,7 +61,8 @@ class PTITChatApp {
             autoVoice: false,
             showLatency: false,
             voice: "female",
-            voiceSpeed: 1.35
+            voiceSpeed: 1.35,
+            voiceMode: "auto"
         };
         this.lastBenchmark = null;
         this.currentBotAudio = null;
@@ -212,6 +213,7 @@ class PTITChatApp {
         this.statTtftDisplay = document.getElementById("statTtftDisplay");
         this.statTotalDisplay = document.getElementById("statTotalDisplay");
         this.statModelDisplay = document.getElementById("statModelDisplay");
+        this.voiceModeSelect = document.getElementById("voiceModeSelect");
         this.voiceSelect = document.getElementById("voiceSelect");
         this.voiceSpeedSelect = document.getElementById("voiceSpeedSelect");
         this.voiceSpeedRange = document.getElementById("voiceSpeedRange");
@@ -390,6 +392,11 @@ class PTITChatApp {
                 if (this.topKValue) this.topKValue.textContent = this.topKInput.value;
             });
         }
+        if (this.voiceModeSelect) {
+            this.voiceModeSelect.addEventListener("change", () => {
+                this.updateVoiceStatusUI(this.voiceSelect ? this.voiceSelect.value : this.settings.voice);
+            });
+        }
         if (this.voiceSelect) {
             this.voiceSelect.addEventListener("change", () => {
                 this.updateVoiceStatusUI(this.voiceSelect.value);
@@ -459,14 +466,18 @@ class PTITChatApp {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                             text: sampleText,
-                            voice: voiceInfo.backendVoice || "vi-VN-HoaiMyNeural"
+                            voice: voiceInfo.backendVoice || "vi-VN-HoaiMyNeural",
+                            speed: spd
                         })
                     })
                     .then(res => res.json())
                     .then(data => {
                         if (data && data.audio_url) {
                             const aud = new Audio(data.audio_url);
+                            aud.defaultPlaybackRate = spd;
                             aud.playbackRate = spd;
+                            aud.onloadedmetadata = () => { try { aud.playbackRate = spd; } catch (e) { } };
+                            aud.oncanplay = () => { try { aud.playbackRate = spd; } catch (e) { } };
                             aud.onended = onDone;
                             aud.onerror = onDone;
                             aud.play().catch(onDone);
@@ -771,6 +782,9 @@ class PTITChatApp {
                 if (!this.settings.voiceSpeed || this.settings.voiceSpeed === 1.0 || this.settings.voiceSpeed === 1.25) {
                     this.settings.voiceSpeed = 1.35;
                 }
+                if (!this.settings.voiceMode) {
+                    this.settings.voiceMode = "auto";
+                }
                 const validModels = [
                     "gemini-3.5-flash-lite",
                     "gemini-3.6-flash",
@@ -790,12 +804,16 @@ class PTITChatApp {
     }
 
     openSettingsModal() {
+        if ("speechSynthesis" in window && typeof window.speechSynthesis.getVoices === "function") {
+            try { window.speechSynthesis.getVoices(); } catch (e) { }
+        }
         this.customApiKeyInput.value = this.settings.apiKey || "";
         this.modelSelect.value = this.settings.model || "gemini-3.5-flash-lite";
         this.topKInput.value = this.settings.topK || 4;
         this.topKValue.textContent = this.topKInput.value;
         this.autoVoiceToggle.checked = !!this.settings.autoVoice;
         if (this.showLatencyToggle) this.showLatencyToggle.checked = !!this.settings.showLatency;
+        if (this.voiceModeSelect) this.voiceModeSelect.value = this.settings.voiceMode || "auto";
         if (this.voiceSelect) this.voiceSelect.value = /namminh|male/i.test(this.settings.voice || "") && !/^female$/i.test(this.settings.voice) ? "male" : "female";
         const curSpeed = parseFloat(this.settings.voiceSpeed || 1.35);
         if (this.voiceSpeedRange) this.voiceSpeedRange.value = curSpeed;
@@ -840,6 +858,7 @@ class PTITChatApp {
         this.settings.topK = parseInt(this.topKInput.value, 10) || 4;
         this.settings.autoVoice = this.autoVoiceToggle.checked;
         if (this.showLatencyToggle) this.settings.showLatency = this.showLatencyToggle.checked;
+        if (this.voiceModeSelect) this.settings.voiceMode = this.voiceModeSelect.value;
         if (this.voiceSelect) this.settings.voice = this.voiceSelect.value;
         if (this.voiceSpeedRange) {
             this.settings.voiceSpeed = parseFloat(this.voiceSpeedRange.value) || 1.35;
@@ -875,7 +894,8 @@ class PTITChatApp {
             autoVoice: false,
             showLatency: false,
             voice: "female",
-            voiceSpeed: 1.35
+            voiceSpeed: 1.35,
+            voiceMode: "auto"
         };
         this.lastBenchmark = null;
         this.customApiKeyInput.value = "";
@@ -884,6 +904,7 @@ class PTITChatApp {
         this.topKValue.textContent = "4";
         this.autoVoiceToggle.checked = false;
         if (this.showLatencyToggle) this.showLatencyToggle.checked = false;
+        if (this.voiceModeSelect) this.voiceModeSelect.value = "auto";
         if (this.voiceSelect) this.voiceSelect.value = "female";
         if (this.voiceSpeedRange) this.voiceSpeedRange.value = 1.35;
         if (this.voiceSpeedValue) this.voiceSpeedValue.textContent = "1.35x";
@@ -1552,14 +1573,6 @@ class PTITChatApp {
             const speakBtn = document.createElement("button");
             speakBtn.className = "msg-action-btn msg-speak-btn";
             speakBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i> <span>Đọc</span>';
-
-            const voiceInfo = this.getActiveVoiceInfo();
-            const voiceBadge = document.createElement("span");
-            voiceBadge.className = "msg-voice-badge";
-            voiceBadge.title = voiceInfo.detailName;
-            voiceBadge.innerHTML = `<i class="fa-solid fa-microphone-lines"></i> <span class="voice-badge-text">Đang dùng: ${this.escapeHtml(voiceInfo.shortName)}</span>`;
-            speakBtn._voiceBadge = voiceBadge;
-
             speakBtn.addEventListener("click", () => this.toggleSpeech(msg.content, speakBtn));
             speakBtnRef = speakBtn;
 
@@ -1590,7 +1603,6 @@ class PTITChatApp {
 
             actionsDiv.appendChild(copyBtn);
             actionsDiv.appendChild(speakBtn);
-            actionsDiv.appendChild(voiceBadge);
             actionsDiv.appendChild(latencyBadge);
             wrapperDiv.appendChild(actionsDiv);
         }
@@ -2073,6 +2085,7 @@ class PTITChatApp {
             }
         }
         setTimeout(() => this.updateVoiceStatusUI(), 350);
+        setTimeout(() => this.updateVoiceStatusUI(), 1000);
 
         // Khởi tạo 1 phần tử Audio duy nhất để giữ quyền phát tự động (user activation) xuyên suốt phiên chat
         if (!this.botAudioPlayer) {
@@ -2123,11 +2136,29 @@ class PTITChatApp {
         } catch (e) { }
     }
 
-    getActiveVoiceInfo(preferredVoiceSetting = null) {
+    getActiveVoiceInfo(preferredVoiceSetting = null, preferredMode = null) {
         const raw = preferredVoiceSetting || (this.settings && this.settings.voice) || "female";
         // Tương thích giá trị cũ (vi-VN-NamMinhNeural -> male, còn lại -> female)
         const wantMale = raw === "male" || /namminh/i.test(raw);
+        const modeSetting = preferredMode || (this.voiceModeSelect ? this.voiceModeSelect.value : (this.settings && this.settings.voiceMode)) || "auto";
 
+        // 1. Nếu người dùng chọn ép chế độ "Máy chủ Backend":
+        if (modeSetting === "backend") {
+            if (wantMale) {
+                return {
+                    mode: "stream", voiceObj: null, backendVoice: "vi-VN-NamMinhNeural",
+                    shortName: "Nam Minh (giọng nam Neural - Backend)",
+                    detailName: "Microsoft Nam Minh Neural — giọng chuẩn tự nhiên (Máy chủ Backend)"
+                };
+            }
+            return {
+                mode: "stream", voiceObj: null, backendVoice: "vi-VN-HoaiMyNeural",
+                shortName: "Hoài My (giọng nữ Neural - Backend)",
+                detailName: "Microsoft Hoài My Neural — giọng chuẩn tự nhiên, truyền cảm (Máy chủ Backend)"
+            };
+        }
+
+        // 2. Tìm kiếm giọng tiếng Việt có sẵn trên trình duyệt (Web Speech API)
         const voices = ("speechSynthesis" in window && typeof window.speechSynthesis.getVoices === "function")
             ? window.speechSynthesis.getVoices()
             : [];
@@ -2161,22 +2192,33 @@ class PTITChatApp {
                 voiceObj: chosen,
                 backendVoice: null,
                 shortName: friendly,
-                detailName: friendly + " — đọc trực tiếp trên trình duyệt (không qua Backend)"
+                detailName: friendly + " — đọc trực tiếp từ trình duyệt (Web Speech API)"
             };
         }
 
-        // Trình duyệt không có giọng phù hợp -> dùng Backend với Edge-TTS Neural Voice chuẩn tự nhiên
+        // 3. Nếu người dùng chọn ép chế độ "Trình duyệt" nhưng máy tính/trình duyệt chưa có giọng
+        if (modeSetting === "native") {
+            return {
+                mode: "stream",
+                voiceObj: null,
+                backendVoice: wantMale ? "vi-VN-NamMinhNeural" : "vi-VN-HoaiMyNeural",
+                shortName: (wantMale ? "Nam Minh" : "Hoài My") + " (Tạm chuyển Backend do trình duyệt chưa có giọng)",
+                detailName: "Trình duyệt chưa có giọng tiếng Việt (mở bằng Microsoft Edge hoặc dùng Máy chủ Backend)"
+            };
+        }
+
+        // 4. Chế độ Tự động (auto) mà trình duyệt chưa có giọng: dùng Backend
         if (wantMale) {
             return {
                 mode: "stream", voiceObj: null, backendVoice: "vi-VN-NamMinhNeural",
                 shortName: "Nam Minh (giọng nam Neural - qua Backend)",
-                detailName: "Microsoft Nam Minh Neural — phát âm chuẩn tự nhiên, truyền cảm"
+                detailName: "Microsoft Nam Minh Neural — giọng đọc máy chủ chuẩn tự nhiên (Backend)"
             };
         }
         return {
             mode: "stream", voiceObj: null, backendVoice: "vi-VN-HoaiMyNeural",
             shortName: "Hoài My (giọng nữ Neural - qua Backend)",
-            detailName: "Microsoft Hoài My Neural — phát âm chuẩn tự nhiên, mượt mà như người"
+            detailName: "Microsoft Hoài My Neural — giọng đọc máy chủ chuẩn tự nhiên, truyền cảm (Backend)"
         };
     }
 
@@ -2185,38 +2227,10 @@ class PTITChatApp {
         if (this.currentVoiceNameDisplay) {
             this.currentVoiceNameDisplay.textContent = info.detailName;
         }
-        // Cập nhật dòng hiển thị giọng nói trên các tin nhắn đang ở trạng thái chờ
-        document.querySelectorAll(".msg-voice-badge:not(.speaking)").forEach(badge => {
-            badge.title = info.detailName;
-            const txtSpan = badge.querySelector(".voice-badge-text");
-            if (txtSpan) {
-                txtSpan.textContent = `Đang dùng: ${info.shortName}`;
-            }
-        });
     }
 
     setVoiceBadgeSpeakingState(btnElement, isSpeaking, voiceShortName = null) {
-        const info = this.getActiveVoiceInfo();
-        const activeName = voiceShortName || info.shortName;
-
-        // Reset tất cả badge về trạng thái bình thường trước
-        if (!isSpeaking) {
-            document.querySelectorAll(".msg-voice-badge").forEach(badge => {
-                badge.classList.remove("speaking");
-                const txt = badge.querySelector(".voice-badge-text");
-                if (txt) txt.textContent = `Đang dùng: ${info.shortName}`;
-            });
-            return;
-        }
-
-        if (btnElement && btnElement._voiceBadge) {
-            const badge = btnElement._voiceBadge;
-            badge.classList.add("speaking");
-            const txt = badge.querySelector(".voice-badge-text");
-            if (txt) {
-                txt.textContent = `🔊 Đang đọc bằng: ${activeName}`;
-            }
-        }
+        // Đã bỏ huy hiệu giọng đọc ở tin nhắn theo yêu cầu giao diện gọn gàng
     }
 
     stopCurrentSpeech() {
@@ -2403,8 +2417,8 @@ class PTITChatApp {
             return `${intPart} phẩy ${decPart} ${unit}${curWord}`;
         });
 
-        // 2. Tiền tệ viết dạng: 1 tỷ 8, 2 triệu 5
-        t = t.replace(/\b(\d+)\s*(tỷ|triệu)\s*(\d+)(?:\s*(?:VNĐ|VND|đ|dong|đồng))?(?=[\s,.)!?;:]|$)/gi, "$1 $2 $3 đồng");
+        // 2. Tiền tệ viết dạng: 1 tỷ 8, 2 triệu 5 (chỉ khi số sau là số đơn lẻ 1-9 và không có đơn vị nghìn/triệu/tỷ phía sau)
+        t = t.replace(/\b(\d+)\s*(tỷ|triệu)\s*([1-9])(?!\s*(?:nghìn|ngàn|trăm|triệu|tỷ|\d))\s*(?:VNĐ|VND|đ|dong|đồng)?(?=[\s,.)!?;:]|$)/gi, "$1 $2 $3 đồng");
 
         // 3. Ký hiệu so sánh và đơn vị thời gian kỹ thuật (< 2s, <= 5s, > 100ms)
         t = t.replace(/<=\s*(\d+)\s*s\b/gi, "dưới hoặc bằng $1 giây");
@@ -2545,14 +2559,72 @@ class PTITChatApp {
         return t;
     }
 
+    stripSourcesForSpeech(text) {
+        if (!text) return "";
+        let s = text;
+        // 1. Ghi chú nguồn trong ngoặc đơn: *(Nguồn: Tuyển sinh PTIT)*, (Nguồn: ...)
+        s = s.replace(/[*_~]*\(\s*(?:📌|🔍)?\s*Nguồn(?:\s+[^\s():]+)?\s*:[^)]+\)[*_~]*/gi, " ");
+        // 2. Toàn bộ khối nguồn ở cuối văn bản (cả tài liệu nội bộ 📌 và nguồn internet 🔍)
+        s = s.replace(/(?:\n+\s*---\s*)?\n*[#*>\-\s]*(?:📌|🔍)?\s*\*{0,2}Nguồn(?:\s+(?:trích\s+dẫn|tham\s+khảo|tài\s+liệu|từ\s+Internet))?\s*:\*{0,2}[\s\S]*$/i, " ");
+        // 3. Các dòng trích dẫn lẻ còn sót (📄 Trang ..., 🔗 link...)
+        s = s.replace(/^\s*[-*•]?\s*📄\s*Trang\s+\d+.*$/gim, " ");
+        s = s.replace(/^\s*[-*•]?\s*🔗\s*.*$/gim, " ");
+        s = s.replace(/^\s*[-*•]?\s*🔍\s*.*$/gim, " ");
+        return s;
+    }
+
+    normalizeCodes(text) {
+        if (!text) return "";
+        const digitMap = {
+            "0": "không", "1": "một", "2": "hai", "3": "ba", "4": "bốn",
+            "5": "năm", "6": "sáu", "7": "bảy", "8": "tám", "9": "chín"
+        };
+        const digitsToWords = (dStr) => dStr.split("").filter(ch => digitMap[ch]).map(ch => digitMap[ch]).join(" ");
+        const majorAcronyms = new Set(["CNTT", "ATTT", "DTVT", "ĐTVT", "KTPM", "KHMT", "TMĐT", "CLC", "PTIT", "BCVT", "ĐTB", "GPA", "ĐRL"]);
+
+        const codePrefixes =
+            "mã\\s+(?:chương\\s+trình(?:\\s+đào\\s+tạo)?|ngành(?:\\s+đào\\s+tạo)?|chuyên\\s+ngành|" +
+            "xét\\s+tuyển|tuyển\\s+sinh|học\\s+phần|môn(?:\\s+học)?|sinh\\s+viên|học\\s+viên|" +
+            "hồ\\s+sơ|trường|đào\\s+tạo|đơn\\s+vị|bưu\\s+chính|định\\s+danh|giao\\s+dịch|" +
+            "tra\\s+cứu|lớp|khóa|tài\\s+khoản|otp|pin|bảo\\s+mật|thí\\s+sinh|hội\\s+đồng)|" +
+            "mã\\s*số|mã(?=\\s*[:=-])|số\\s+báo\\s+danh|sbd|cccd|cmnd|mssv|msv|stk|số\\s+tài\\s+khoản";
+
+        const pat1 = new RegExp(`\\b(${codePrefixes})(?:\\s*[:=-]\\s*|\\s+)([A-Za-z0-9][A-Za-z0-9_.-]{1,})(?=[\\s),.;:!?]|$)`, "gi");
+        let t = text.replace(pat1, (match, prefix, code) => {
+            if (majorAcronyms.has(code.toUpperCase())) return match;
+            const hasDigit = /\d/.test(code);
+            const isAllUpper = code === code.toUpperCase() && /[A-Z]/.test(code);
+            if (!hasDigit && !isAllUpper) return match;
+            if (/^\d{4}$/.test(code) && (code.startsWith("19") || code.startsWith("20")) && !match.includes(":")) {
+                return match;
+            }
+
+            const cleanCode = /^\d+(?:\.\d+)+$/.test(code) ? code.replace(/\./g, "") : code;
+            const tokens = cleanCode.match(/[A-Za-zÀ-ỹ]+|\d+/g) || [cleanCode];
+            const formatted = tokens.map(tok => {
+                if (/^\d+$/.test(tok)) {
+                    return tok.length >= 4 ? digitsToWords(tok) : tok;
+                }
+                const tokIsUpper = tok === tok.toUpperCase() && /[A-Z]/.test(tok);
+                if (tokIsUpper && tok.length <= 5 && !majorAcronyms.has(tok.toUpperCase())) {
+                    return tok.toLowerCase().split("").join(" ");
+                }
+                return tok;
+            });
+            return `${prefix}: ${formatted.join(", ")}`;
+        });
+
+        const nonCodeUnits = "(?:vnđ|vnd|đồng|đ(?=[\\s/.,;!?]|$)|triệu|tỷ|nghìn|ngàn|xu|usd|người|sinh\\s+viên|thí\\s+sinh|học\\s+sinh|chỉ\\s+tiêu|tín\\s+chỉ|lượt|lần|hồ\\s+sơ|điểm|giây|phút|giờ|môn|bài|trang|năm|tháng|ngày|mét|km|kg|mb|gb)";
+        const pat2 = new RegExp(`\\b(\\d{6,15})\\b(?!\\s*${nonCodeUnits})`, "gi");
+        t = t.replace(pat2, (match, digits) => digitsToWords(digits));
+
+        return t;
+    }
+
     normalizeTextForSpeech(text) {
         if (!text) return "";
 
-        let s = text;
-
-        // 0. Loại bỏ phần chân trang "📌 Nguồn trích dẫn:" để giọng nói không đọc tên file PDF
-        s = s.replace(/(?:\n+\s*---\s*)?\n*📌\s*\*{0,2}Nguồn[\s\S]*$/i, " ");
-        s = s.replace(/^\s*[-*•]?\s*📄\s*Trang\s+\d+\s*[-–—|]\s*File:.*$/gim, " ");
+        let s = this.stripSourcesForSpeech(text);
 
         // 0.01. Chuẩn hóa ngày tháng năm TRƯỚC TIÊN (01/11/2026 -> ngày 1 tháng 11 năm 2026) để tránh bị dấu gạch chéo '/' biến thành 'trên'/'hoặc'
         s = this.normalizeDates(s);
@@ -2568,16 +2640,18 @@ class PTITChatApp {
         // 0.2. Chuẩn hóa số điện thoại thành từng cụm chữ số tự nhiên ngắt nhịp TRƯỚC KHI regex tiền tệ quét qua
         s = this.normalizePhoneNumbers(s);
 
-        // 1. Tránh lặp từ 'Học viện' và chuẩn hóa cách đọc PTIT để giọng đọc mượt mà, không bị ngắt quãng
-        s = s.replace(/Học\s+viện\s+(?:Công\s+nghệ\s+)?Bưu\s+chính\s+Viễn\s+thông\s*\(\s*PTIT\s*\)/gi, "Học viện Công nghệ Bưu chính Viễn thông");
-        s = s.replace(/Cổng\s+thông\s+tin\s+(?:Học\s+viện\s+)?PTIT\b/gi, "Cổng thông tin Bưu chính Viễn thông");
-        s = s.replace(/Học\s+viện\s+PTIT\b/gi, "Học viện Bưu chính Viễn thông");
-        s = s.replace(/\bPTIT\b/g, "Bưu chính Viễn thông");
+        // 0.25. Chuẩn hóa mã chương trình, mã ngành, mã học phần... thành chữ số tự nhiên (chống đọc kiểu tiền)
+        s = this.normalizeCodes(s);
 
-        // Đảm bảo 'Bưu chính' và 'Viễn thông' luôn viết chuẩn bằng dấu cách tự nhiên,
-        // tuyệt đối không có dấu gạch ngang '-' để tránh bộ đọc nhận nhầm thành 'viễn đông'
-        s = s.replace(/\bBưu[\s-]+chính\b/gi, "Bưu chính");
-        s = s.replace(/\bViễn[\s-]+thông\b/gi, "Viễn thông");
+        // 1. Tránh lặp từ 'Học viện' và chuẩn hóa cách đọc PTIT (dạng thường 'bưu chính viễn thông' để Edge-TTS không ngắt nhịp tại chữ 'Viễn')
+        s = s.replace(/Học\s+viện\s+(?:Công\s+nghệ\s+)?Bưu\s+chính\s+Viễn\s+thông\s*\(\s*PTIT\s*\)/gi, "Học viện Công nghệ bưu chính viễn thông");
+        s = s.replace(/Cổng\s+thông\s+tin\s+(?:Học\s+viện\s+)?PTIT\b/gi, "Cổng thông tin bưu chính viễn thông");
+        s = s.replace(/Học\s+viện\s+PTIT\b/gi, "Học viện bưu chính viễn thông");
+        s = s.replace(/\bPTIT\b/g, "bưu chính viễn thông");
+
+        s = s.replace(/\bBưu[\s-]+chính\s+Viễn[\s-]+thông\b/gi, "bưu chính viễn thông");
+        s = s.replace(/\bBưu[\s-]+chính\b/gi, "bưu chính");
+        s = s.replace(/\bViễn[\s-]+thông\b/gi, "viễn thông");
 
         // 1.1. Chuẩn hóa ngắt dòng và gạch đầu dòng (bullet points) thành dấu ngắt câu để đọc tách bạch
         s = s.replace(/(?<![.!?;:])\s*\n\s*[-*•+]\s*/g, ". ");
@@ -2593,6 +2667,7 @@ class PTITChatApp {
             .replace(/\[(.*?)\]\(.*?\)/g, "$1")
             .replace(/https?:\/\/\S+/g, " ")
             .replace(/[*_~#><]/g, " ")
+            .replace(/⚠️|📌|🔍|📄|🔗|✅|❌|🎓|•/g, " ")
             .replace(/\$\s*\\ge(q)?\s*([^$]+)\$/g, "từ $2 trở lên")
             .replace(/\$\s*\\le(q)?\s*([^$]+)\$/g, "dưới hoặc bằng $2")
             .replace(/\$([^$]+)\$/g, "$1")
@@ -2600,7 +2675,7 @@ class PTITChatApp {
 
         // 3. Chuẩn hóa số tiền và các số hàng triệu/nghìn có dấu chấm (VD: 1.410.000, 1.410.000 VNĐ, 550.000đ/tín chỉ)
         // Tránh lỗi Windows/Edge đọc "1.410.000" thành "một nghìn 4 trăm 10 không không không đồng"
-        const currencyRegex = /\b(\d{1,3}(?:\.\d{3})+)\s*(\/(?:tháng|năm|kỳ|học kỳ|tín chỉ|[^\s,.?!]+(?:\s+[^\s,.?!]+)?)|\s*(?:VNĐ|VND|đồng|đ(?=[\s\/]|$))(?:\/(?:tháng|năm|kỳ|học kỳ|tín chỉ|[^\s,.?!]+(?:\s+[^\s,.?!]+)?))?)?/gi;
+        const currencyRegex = /\b(\d{1,3}(?:\.\d{3})+)(?:\s*(\/(?:tháng|năm|kỳ|học\s+kỳ|tín\s+chỉ|[^\s,.?!]+(?:\s+[^\s,.?!]+)?)|(?:VNĐ|VND|đồng|đ(?=[\s\/,.!?]|$))(?:\/(?:tháng|năm|kỳ|học\s+kỳ|tín\s+chỉ|[^\s,.?!]+(?:\s+[^\s,.?!]+)?))?))?/gi;
         s = s.replace(currencyRegex, (match, numStr, suffix) => {
             const rawDigits = numStr.replace(/\./g, "");
             const val = parseInt(rawDigits, 10);
@@ -2616,7 +2691,15 @@ class PTITChatApp {
                 const trieu = Math.floor(val / 1000000);
                 const nghin = Math.floor((val % 1000000) / 1000);
                 textNum = trieu + " triệu";
-                if (nghin > 0) textNum += " " + nghin + " nghìn";
+                if (nghin > 0) {
+                    const tramNghin = Math.floor(nghin / 100);
+                    const chucNghin = nghin % 100;
+                    if (tramNghin === 0 && chucNghin > 0) {
+                        textNum += " không trăm " + chucNghin + " nghìn";
+                    } else {
+                        textNum += " " + nghin + " nghìn";
+                    }
+                }
             } else if (val >= 1000) {
                 const nghin = Math.floor(val / 1000);
                 const tram = val % 1000;
@@ -2627,7 +2710,7 @@ class PTITChatApp {
             }
 
             const suf = (suffix || "").trim();
-            const hasCurrency = /\b(?:vnđ|vnd|đồng)\b|đ(?:\b|\/)/i.test(suf) || val >= 100000;
+            const hasCurrency = /\b(?:vnđ|vnd|đồng)\b|đ(?:\b|\/)/i.test(suf) || /^\/(?:tháng|năm|kỳ|học\s+kỳ|tín\s+chỉ)/i.test(suf);
             let cleanSuf = suf.replace(/^(?:vnđ|vnd|đồng|đ)\s*/i, "").trim();
             if (cleanSuf.startsWith("/")) {
                 cleanSuf = " một " + cleanSuf.substring(1).trim();
@@ -2641,8 +2724,8 @@ class PTITChatApp {
 
         // 4. Mở rộng từ viết tắt chuyên ngành PTIT
         const abbrevs = [
-            [/\bPTIT\b/g, "Học viện Bưu chính Viễn thông"],
-            [/\bBCVT\b/g, "Bưu chính Viễn thông"],
+            [/\bPTIT\b/g, "Học viện bưu chính viễn thông"],
+            [/\bBCVT\b/g, "bưu chính viễn thông"],
             [/\bCNTT\b/g, "Công nghệ thông tin"],
             [/\bATTT\b/g, "An toàn thông tin"],
             [/\b(DTVT|ĐTVT)\b/g, "Điện tử viễn thông"],
@@ -2663,16 +2746,28 @@ class PTITChatApp {
             [/\bGDTC\b/g, "Giáo dục thể chất"],
             [/\bGDQP\b|\bGDQP-AN\b/g, "Giáo dục quốc phòng an ninh"],
             [/\bCTSV\b/g, "Công tác sinh viên"],
-            [/\bĐRL\b/g, "Điểm rèn luyện"]
+            [/\bĐRL\b/g, "Điểm rèn luyện"],
+            [/\b(?:T\.P\.|TP\.|TP)\s+Hồ\s+Chí\s+Minh\b/g, "Thành phố Hồ Chí Minh"],
+            [/\b(?:T\.P\.|TP\.|TP)\s+HCM\b/g, "Thành phố Hồ Chí Minh"],
+            [/\b(?:T\.P\.|TP\.|TP)\s+Hà\s+Nội\b/g, "Thành phố Hà Nội"],
+            [/\b(?:T\.P\.|TP\.|TP)\s+Đà\s+Nẵng\b/g, "Thành phố Đà Nẵng"],
+            [/\b(?:T\.P\.|TP\.|TP)\s+Hải\s+Phòng\b/g, "Thành phố Hải Phòng"],
+            [/\b(?:T\.P\.|TP\.|TP)\s+Cần\s+Thơ\b/g, "Thành phố Cần Thơ"],
+            [/\b(?:T\.P\.|TP\.|TP)\s+Huế\b/g, "Thành phố Huế"],
+            [/\b(?:T\.P\.|TP\.)\s*(?=[A-ZĐÀ-Ỹ])/g, "Thành phố "],
+            [/\bTP\s+(?=[A-ZĐÀ-Ỹ][a-zà-ỹ]+)/g, "Thành phố "],
+            [/\bTX\.\s*(?=[A-ZĐÀ-Ỹ])|\bTX\s+(?=[A-ZĐÀ-Ỹ][a-zà-ỹ]+)/g, "Thị xã "],
+            [/\bTT\.\s*(?=[A-ZĐÀ-Ỹ])|\bTT\s+(?=[A-ZĐÀ-Ỹ][a-zà-ỹ]+)/g, "Thị trấn "]
         ];
 
         for (const [rgx, rep] of abbrevs) {
             s = s.replace(rgx, rep);
         }
 
-        // Đảm bảo lại một lần nữa 'Bưu chính' và 'Viễn thông' không bị dính dấu gạch ngang
-        s = s.replace(/\bBưu[\s-]+chính\b/gi, "Bưu chính");
-        s = s.replace(/\bViễn[\s-]+thông\b/gi, "Viễn thông");
+        // Đảm bảo lại một lần nữa 'bưu chính viễn thông' viết thường liền mạch không có dấu gạch ngang
+        s = s.replace(/\bBưu[\s-]+chính\s+Viễn[\s-]+thông\b/gi, "bưu chính viễn thông");
+        s = s.replace(/\bBưu[\s-]+chính\b/gi, "bưu chính");
+        s = s.replace(/\bViễn[\s-]+thông\b/gi, "viễn thông");
 
         // 5. Xử lý dấu gạch chéo '/' theo đúng ngữ cảnh (tránh đọc là 'phần')
         // 5.1. Đơn vị tính / tiền tệ: đ/tín chỉ, /tháng -> 'trên mỗi'
@@ -2693,6 +2788,25 @@ class PTITChatApp {
             return `${subClean} chấm p tit chấm edu chấm vn`;
         });
         s = s.replace(/\bptit\.edu\.vn\b/gi, "p tit chấm edu chấm vn");
+
+        // 5.25. Chuẩn hóa số hiệu văn bản hành chính (Quyết định, Thông báo, Kế hoạch... VD: 1462/QĐ-HV, 25/TB-HV, 01/NQ-CP)
+        // Dấu gạch chéo '/' ngăn cách số hiệu và ký hiệu văn bản -> chuyển thành dấu phẩy để ngắt nhịp tự nhiên (không đọc là 'hoặc')
+        s = s.replace(/\b(\d+)\s*\/\s*([A-ZĐÀ-Ỹ]{2,}(?:-[A-ZĐÀ-Ỹ0-9]+)*)(?=[\s),.;:!?]|$)/g, (match, docNum, docSymbol) => {
+            let cleanSym = docSymbol.replace(/-/g, " ");
+            cleanSym = cleanSym.replace(/(^|\s)QĐ(?=\s|$)/g, "$1Quyết định");
+            cleanSym = cleanSym.replace(/(^|\s)HV(?=\s|$)/g, "$1Học viện");
+            cleanSym = cleanSym.replace(/(^|\s)TB(?=\s|$)/g, "$1Thông báo");
+            cleanSym = cleanSym.replace(/(^|\s)KH(?=\s|$)/g, "$1Kế hoạch");
+            cleanSym = cleanSym.replace(/(^|\s)NQ(?=\s|$)/g, "$1Nghị quyết");
+            cleanSym = cleanSym.replace(/(^|\s)NĐ(?=\s|$)/g, "$1Nghị định");
+            cleanSym = cleanSym.replace(/(^|\s)TT(?=\s|$)/g, "$1Thông tư");
+            cleanSym = cleanSym.replace(/(^|\s)CT(?=\s|$)/g, "$1Chỉ thị");
+            cleanSym = cleanSym.replace(/(^|\s)BCVT(?=\s|$)/g, "$1Bưu chính Viễn thông");
+            cleanSym = cleanSym.replace(/(^|\s)(?:BGDĐT|BGD)(?=\s|$)/g, "$1Bộ Giáo dục và Đào tạo");
+            cleanSym = cleanSym.replace(/(^|\s)BTTTT(?=\s|$)/g, "$1Bộ Thông tin và Truyền thông");
+            return `${docNum}, ${cleanSym}`;
+        });
+        s = s.replace(/\b(\d+)\s*\/\s*(Quyết\s+định|Thông\s+báo|Kế\s+hoạch|Nghị\s+định|Nghị\s+quyết|Thông\s+tư)\b/gi, "$1, $2");
 
         // 5.3. Dấu gạch chéo giữa 2 tên miền hoặc lựa chọn: clc / it -> 'hoặc'
         s = s.replace(/([a-zA-ZÀ-ỹ0-9.-]+)\s*\/\s*([a-zA-ZÀ-ỹ0-9.-]+)/g, "$1 hoặc $2");
@@ -2738,9 +2852,16 @@ class PTITChatApp {
                     }
                 }
                 if (temp) {
-                    // Nếu 1 mệnh đề vẫn dài hơn maxChunkLen -> cắt theo từ
+                    // Nếu 1 mệnh đề vẫn dài hơn maxChunkLen -> ưu tiên tách tại từ nối ngữ nghĩa để không chặt đôi từ ghép (vd: "viễn | thông")
+                    const minSplit = Math.floor(maxChunkLen * 0.45);
+                    const phraseBoundaries = [" của ", " tại ", " ở ", " về ", " và ", " hoặc ", " để ", " với ", " trong ", " theo ", " cho ", " là ", " nhưng ", " khi "];
                     while (temp.length > maxChunkLen) {
-                        let cutIdx = temp.lastIndexOf(" ", maxChunkLen);
+                        let cutIdx = -1;
+                        for (const sep of phraseBoundaries) {
+                            const idx = temp.lastIndexOf(sep, maxChunkLen);
+                            if (idx >= minSplit && idx > cutIdx) cutIdx = idx;
+                        }
+                        if (cutIdx <= 0) cutIdx = temp.lastIndexOf(" ", maxChunkLen);
                         if (cutIdx <= 0) cutIdx = maxChunkLen;
                         subChunks.push(temp.substring(0, cutIdx).trim());
                         temp = temp.substring(cutIdx).trim();
@@ -2831,8 +2952,8 @@ class PTITChatApp {
     feedLiveSpeech(rawText, isFinal = false, btnElement = null, activeToken = null) {
         if (!rawText) return activeToken;
 
-        // Loại bỏ phần chân trang "📌 Nguồn trích dẫn:" khi đang stream để TTS không đọc tên file
-        rawText = rawText.replace(/(?:\n+\s*---\s*)?\n*📌\s*\*{0,2}Nguồn[\s\S]*$/i, "");
+        // Loại bỏ phần chân trang nguồn (cả tài liệu nội bộ lẫn tra Internet) và ghi chú (Nguồn: ...) khi đang stream
+        rawText = this.stripSourcesForSpeech(rawText).trim();
         if (!rawText) return activeToken;
 
         // Nếu người dùng đã bấm "Dừng" trong lúc đang stream -> không tự phát tiếp nữa
@@ -2935,20 +3056,21 @@ class PTITChatApp {
 
         this.setVoiceBadgeSpeakingState(btnElement, true, voiceInfo.shortName);
 
-        // CHẾ ĐỘ 1: Nếu người dùng đã cài đặt và trình duyệt hỗ trợ Web Speech API với giọng tiếng Việt tốt
-        // (Đồng bộ tốc độ speed nghiêm ngặt cho toàn bộ câu trong queue)
-        if (voiceInfo.mode === "native" && voiceInfo.voiceObj && window.speechSynthesis) {
-            this.playViaNativeSpeech(text, voiceInfo, selectedSpeed, btnElement, sessionToken);
-            return;
-        }
-
-        // CHẾ ĐỘ 2: Đọc qua Backend (/api/tts - Edge-TTS / gTTS)
+        // Tách câu thành các đoạn ngắn (<= 170 ký tự) cho cả 2 chế độ:
+        // Ngăn chặn triệt để lỗi Chromium dừng sau 15 giây hoặc treo khi đọc cả đoạn dài
         let sentences = this.splitIntoSentences(text, 170);
         if (sentences.length === 0) {
             this.stopCurrentSpeech();
             return;
         }
 
+        // CHẾ ĐỘ 1: Nếu người dùng chọn hoặc trình duyệt có giọng tiếng Việt trực tiếp
+        if (voiceInfo.mode === "native" && voiceInfo.voiceObj && window.speechSynthesis) {
+            this.startNativeStreamingQueue(sentences, voiceInfo, selectedSpeed, btnElement, sessionToken, false);
+            return;
+        }
+
+        // CHẾ ĐỘ 2: Đọc qua Backend (/api/tts - Edge-TTS / gTTS)
         await this.startSentenceStreamingQueue(sentences, voiceInfo, selectedSpeed, btnElement, sessionToken, false);
     }
 
@@ -3027,63 +3149,12 @@ class PTITChatApp {
     }
 
     playViaNativeSpeech(text, voiceInfo, speed, btnElement, sessionToken) {
-        const plainText = this.normalizeTextForSpeech(text);
-        const viVoice = voiceInfo.voiceObj;
-
-        const utterance = new SpeechSynthesisUtterance(plainText);
-        utterance.lang = viVoice.lang || "vi-VN";
-        utterance.voice = viVoice;
-        utterance.rate = speed;
-        this.currentUtterance = utterance;
-
-        if (btnElement) {
-            btnElement.classList.add("active");
-            const span = btnElement.querySelector("span");
-            if (span) span.textContent = "Dừng";
-            const icon = btnElement.querySelector("i");
-            if (icon) icon.className = "fa-solid fa-stop";
+        let sentences = this.splitIntoSentences(text, 170);
+        if (sentences.length === 0) {
+            this.stopCurrentSpeech();
+            return;
         }
-        this.setVoiceBadgeSpeakingState(btnElement, true, voiceInfo.shortName);
-
-        utterance.onend = () => {
-            if (this.speechSessionToken === sessionToken) {
-                this.stopCurrentSpeech();
-            }
-        };
-
-        utterance.onerror = (e) => {
-            if (this.speechSessionToken === sessionToken) {
-                this.stopCurrentSpeech();
-            }
-        };
-
-        // Chromium có lỗi: speak() ngay sau cancel() đôi khi bị bỏ qua (giao diện báo "đang đọc" nhưng không có tiếng).
-        // -> chờ một nhịp ngắn sau cancel(), và tự thử lại nếu utterance không thực sự bắt đầu.
-        let started = false;
-        utterance.onstart = () => { started = true; };
-
-        const speakOnce = (attempt) => {
-            if (this.speechSessionToken !== sessionToken || !window.speechSynthesis) return;
-            try {
-                window.speechSynthesis.cancel();
-                window.speechSynthesis.resume();
-            } catch (e) { }
-            setTimeout(() => {
-                if (this.speechSessionToken !== sessionToken) return;
-                window.speechSynthesis.speak(utterance);
-                // Kiểm tra sau 1.2s: nếu chưa bắt đầu đọc -> thử lại (tối đa 2 lần)
-                setTimeout(() => {
-                    if (this.speechSessionToken !== sessionToken || started) return;
-                    if (attempt < 2) {
-                        speakOnce(attempt + 1);
-                    } else {
-                        this.stopCurrentSpeech();
-                        this.showToast("Trình duyệt không phát được giọng đọc. Vui lòng bấm Đọc để thử lại.", "error");
-                    }
-                }, 1200);
-            }, 120);
-        };
-        speakOnce(0);
+        this.startNativeStreamingQueue(sentences, voiceInfo, speed, btnElement, sessionToken, false);
     }
 
     async startSentenceStreamingQueue(sentences, voiceInfo, speed, btnElement, sessionToken, isLiveStreaming = false) {
@@ -3119,7 +3190,7 @@ class PTITChatApp {
                     const attemptCtrl = new AbortController();
                     const onGlobalAbort = () => attemptCtrl.abort();
                     abortSignal.addEventListener("abort", onGlobalAbort);
-                    const attemptTimer = setTimeout(() => attemptCtrl.abort(), 4500);
+                    const attemptTimer = setTimeout(() => attemptCtrl.abort(), 8500);
                     try {
                         const selectedSpeed = parseFloat(this.settings.voiceSpeed || 1.35);
                         const resp = await fetch("/api/tts", {
@@ -3239,9 +3310,12 @@ class PTITChatApp {
             failedSentences = 0;
             isCurrentAudioReady = true;
 
-            // Ngay khi câu hiện tại đã có âm thanh, tải ngầm (prefetch) câu kế tiếp nếu đã có trong hàng đợi
+            // Ngay khi câu hiện tại đã có âm thanh, tải ngầm (prefetch) 2 câu kế tiếp để chuyển câu không bị khựng
             if (currentIdx + 1 < this.sentenceQueue.length) {
                 getSentenceAudioUrl(currentIdx + 1);
+            }
+            if (currentIdx + 2 < this.sentenceQueue.length) {
+                getSentenceAudioUrl(currentIdx + 2);
             }
 
             const audio = this.botAudioPlayer;
@@ -3266,8 +3340,21 @@ class PTITChatApp {
             audio.volume = 1;
             audio.src = srcUrl;
             try {
+                audio.defaultPlaybackRate = speed;
                 audio.playbackRate = speed;
             } catch (e) { }
+
+            audio.onloadedmetadata = () => {
+                try {
+                    audio.playbackRate = speed;
+                } catch (e) { }
+            };
+
+            audio.oncanplay = () => {
+                try {
+                    audio.playbackRate = speed;
+                } catch (e) { }
+            };
 
             audio.onplaying = () => {
                 if (this.speechSessionToken !== sessionToken) return;

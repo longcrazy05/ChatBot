@@ -1296,10 +1296,16 @@ NGUYÊN TẮC BẮT BUỘC:
      + Nếu câu hỏi hỏi cụ thể về "dạy môn gì", "dạy những môn nào", "các môn giảng dạy" của một Thầy/Cô:
      + Trong file `giang_vien.pdf` chỉ có thông tin chung về "Chuyên ngành giảng dạy" (ví dụ: Công nghệ thông tin), KHÔNG CÓ danh sách các môn học cụ thể.
      + Do đó, bạn BẮT BUỘC phải nêu rõ: "Hiện tại tài liệu nội bộ chỉ ghi nhận chuyên ngành giảng dạy chung là [Tên chuyên ngành] mà chưa liệt kê chi tiết tên từng môn học cụ thể do Thầy/Cô giảng dạy."
+   - NGUYÊN TẮC VỀ TUYỂN SINH (ĐẠI HỌC CHÍNH QUY vs THẠC SĨ / SAU ĐẠI HỌC):
+     + Khi người dùng hỏi về "tuyển sinh", "chỉ tiêu tuyển sinh", "điểm chuẩn", "phương thức xét tuyển", "thí sinh" mà KHÔNG nói rõ là "thạc sĩ", "sau đại học", "cao học", "tiến sĩ":
+       * Mặc định hiểu là người dùng đang hỏi về TUYỂN SINH ĐẠI HỌC CHÍNH QUY.
+       * File `ts_thac_si.pdf` (Thông báo Tuyển sinh trình độ Thạc sĩ) CHỈ dành riêng cho bậc Thạc sĩ (Sau đại học). TUYỆT ĐỐI KHÔNG dùng thông tin, chỉ tiêu, môn thi của Thạc sĩ để trả lời cho câu hỏi tuyển sinh đại học!
+       * Nếu tài liệu nội bộ không có đề án tuyển sinh đại học chính quy: BẮT BUỘC thông báo rõ ràng rằng tài liệu nội bộ PTIT hiện chỉ có Thông báo tuyển sinh trình độ Thạc sĩ năm 2026, chưa ghi nhận thông tin về chỉ tiêu tuyển sinh Đại học chính quy (để hệ thống tự động kích hoạt tra cứu Internet).
    - NGUYÊN TẮC KIỂM TRA THỰC THỂ BẮT BUỘC (CHỐNG BỊA NGUỒN & CHỐNG DÙNG KIẾN THỨC NGOÀI TÀI LIỆU):
      + Nếu người dùng hỏi về một cá nhân/giảng viên cụ thể (ví dụ: "Hoàng Mạnh Cường"), một trang web/tên miền cụ thể (ví dụ: "it.ptit.edu.vn"), hoặc một đối tượng cụ thể mà tên đó HOÀN TOÀN KHÔNG XUẤT HIỆN trong dữ liệu ngữ cảnh ở trên:
        * TUYỆT ĐỐI KHÔNG tự suy diễn hoặc lấy kiến thức bên ngoài tài liệu để trả lời!
        * BẮT BUỘC trả lời rằng tài liệu hiện có chưa có thông tin về đối tượng/vấn đề này (để hệ thống tự động kích hoạt tìm kiếm Internet).
+     + CẤM THAY THẾ ĐỐI TƯỢNG: Nếu người dùng hỏi về một cơ sở / địa điểm / tòa nhà / đơn vị cụ thể (vd: "cơ sở Ngọc Trục") mà tài liệu chỉ có thông tin của cơ sở/địa điểm KHÁC (vd: cơ sở Hà Đông, Trần Phú, Nguyễn Đình Chiểu): TUYỆT ĐỐI KHÔNG đem thông tin của đối tượng khác ra trả lời thay. BẮT BUỘC trả lời rằng tài liệu hiện có chưa có thông tin về đối tượng được hỏi.
    {no_info_rule}
 
 2. ĐỊNH DẠNG TRÌNH BÀY:
@@ -1354,7 +1360,7 @@ def build_web_rag_prompt(question: str, web_context: str, history=None, internal
     else:
         rule1 = """1. BẮT BUỘC mở đầu câu trả lời bằng thông báo rõ ràng cho người dùng theo đúng mẫu sau:
 📌 **Tài liệu nội bộ PTIT hiện chưa ghi nhận thông tin về nội dung này.** Hệ thống đã tự động tra cứu bổ sung trên Internet để hỗ trợ bạn:
-*(⚠️ Lưu ý: Thông tin dưới đây được tổng hợp từ Internet, không phải văn bản chính thức của Học viện BCVT. Vui lòng xác minh lại nếu cần)*"""
+*(⚠️ Lưu ý: Thông tin dưới đây được tổng hợp từ Internet. Vui lòng xác minh lại nếu cần)*"""
 
     return f"""Bạn là Trợ lý Ảo AI của Học viện Công nghệ Bưu chính Viễn thông (Học viện BCVT).
 {internal_section}KẾT QUẢ TÌM KIẾM TỪ INTERNET ĐỂ THAM KHẢO (CÁC TRANG WEB CHÍNH THỨC CỦA PTIT):
@@ -1530,15 +1536,91 @@ def _strip_all_citations(text: str) -> str:
     return body
 
 
+def _strip_accents_lower(text: str) -> str:
+    """Bỏ dấu tiếng Việt + chữ thường + gộp khoảng trắng để so khớp thực thể không phụ thuộc cách gõ."""
+    import unicodedata
+    s = (text or "").lower().replace("đ", "d")
+    s = unicodedata.normalize("NFD", s)
+    s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
+    return re.sub(r"\s+", " ", s)
+
+
+# Từ chung / từ để hỏi: gặp là dừng khi trích cụm địa danh phía sau từ kích hoạt
+_ENTITY_STOP_WORDS = {
+    "đâu", "nào", "gì", "này", "đó", "kia", "ấy", "mới", "cũ", "chính", "phụ", "của", "có", "không",
+    "như", "thế", "là", "và", "hay", "hoặc", "với", "cho", "hiện", "nay", "bao", "nhiêu", "học", "viện",
+    "trường", "ptit", "thông", "tin", "nằm", "đặt", "ra", "sao", "nhé", "ạ", "ơi", "vậy", "nhỉ", "thì",
+    "được", "đang", "sẽ", "đã", "các", "những", "một", "mấy", "để", "từ", "đến", "về", "trong", "ngoài",
+    "đào", "tạo", "đại", "tp", "hcm", "phía", "bắc", "nam", "miền", "khi",
+}
+_ENTITY_TRIGGER_WORDS = {"cơ", "sở", "campus", "khu", "tòa", "ở", "tại", "địa", "chỉ", "trung", "tâm", "câu", "lạc", "bộ", "clb", "hội", "trường", "ký", "túc", "xá", "ktx", "cuộc", "thi"}
+
+_ENTITY_TRIGGER_RE = re.compile(
+    r"\b(?:cơ\s+sở|campus|khu|tòa|hội\s+trường|ký\s+túc\s+xá|ktx|trung\s+tâm|câu\s+lạc\s+bộ|clb|cuộc\s+thi|ở|tại|địa\s+chỉ|phường|quận|huyện|xã|thôn|đường|phố|làng)\s+"
+    r"([A-Za-zÀ-ỹ]+(?:\s+[A-Za-zÀ-ỹ]+){0,3})",
+    re.IGNORECASE
+)
+
+
+def _extract_specific_entity_phrases(question: str) -> list:
+    """
+    Trích các cụm địa danh / tên riêng cụ thể trong câu hỏi (vd: 'Ngọc Trục', 'Hòa Lạc').
+    - Cụm đứng sau từ kích hoạt địa điểm (cơ sở, ở, tại, địa chỉ, phường, đường...), dừng ở từ chung/từ để hỏi.
+    - Cụm từ viết hoa liên tiếp (>= 2 từ) không nằm đầu câu.
+    Chỉ giữ cụm có >= 2 từ để tránh báo động giả.
+    """
+    if not question:
+        return []
+    phrases = []
+
+    for m in _ENTITY_TRIGGER_RE.finditer(question):
+        words = []
+        for w in m.group(1).split():
+            wl = w.lower()
+            if wl in _ENTITY_TRIGGER_WORDS:
+                if words:
+                    break
+                continue  # bỏ qua từ kích hoạt lặp ở đầu cụm (vd: "cơ sở ở Ngọc Trục")
+            if wl in _ENTITY_STOP_WORDS:
+                break
+            words.append(w)
+        if len(words) >= 2:
+            phrases.append(" ".join(words))
+
+    for m in re.finditer(r"(?<!^)(?<![.!?]\s)\b([A-ZÀ-Ỹ][a-zà-ỹ]+(?:\s+[A-ZÀ-Ỹ][a-zà-ỹ]+)+)", question):
+        cand = m.group(1)
+        if not any(w.lower() in _ENTITY_STOP_WORDS or w.lower() in _ENTITY_TRIGGER_WORDS for w in cand.split()):
+            phrases.append(cand)
+
+    seen, result = set(), []
+    for p in phrases:
+        key = _strip_accents_lower(p)
+        if key not in seen:
+            seen.add(key)
+            result.append(p)
+    return result
+
+
 def _is_queried_entity_missing_in_context(question: str, context_str: str) -> bool:
     """
-    Kiểm tra nhanh xem câu hỏi có đang hỏi về một thực thể cụ thể (tên giảng viên, tên miền web)
-    mà hoàn toàn KHÔNG tồn tại trong ngữ cảnh tài liệu nội bộ hay không.
-    Nếu không tồn tại -> Chuyển thẳng sang Web Search Fallback (không chờ LLM sinh câu từ chối hoặc bịa nguồn).
+    Kiểm tra nhanh xem:
+    0. Người dùng có chủ động yêu cầu tra cứu trên Internet / web / Google không.
+    1. Câu hỏi có đang hỏi về một tên miền hoặc giảng viên cụ thể mà tài liệu nội bộ không có.
+    2. Câu hỏi hỏi về Tuyển sinh / Chỉ tiêu / Điểm chuẩn / Xét tuyển Đại học chính quy trong khi tài liệu nội bộ chỉ có Tuyển sinh Thạc sĩ.
+    Nếu có -> Chuyển thẳng sang Web Search Fallback (không chờ LLM sinh câu từ chối hoặc trả lời sai sang thạc sĩ).
     """
     if not question:
         return False
+    q_lower = question.lower()
     ctx_lower = (context_str or "").lower()
+
+    # 0. Người dùng chủ động yêu cầu tra cứu trên Internet / tìm kiếm web / Google
+    user_requests_web = bool(re.search(
+        r"\b(?:tra\s+(?:cứu\s+)?(?:trên\s+|qua\s+)?(?:internet|mạng|google|web)|tìm\s+(?:kiếm\s+)?(?:trên\s+|qua\s+)?(?:internet|mạng|google|web)|search\s+web|cần\s+tra\s+(?:trên\s+)?internet)\b",
+        q_lower
+    ))
+    if user_requests_web:
+        return True
 
     # 1. Kiểm tra nếu người dùng hỏi về một tên miền / trang web cụ thể (vd: it.ptit.edu.vn)
     queried_domains = web_search.extract_queried_domains(question)
@@ -1550,6 +1632,34 @@ def _is_queried_entity_missing_in_context(question: str, context_str: str) -> bo
     lecturer_name = web_search.extract_queried_lecturer_name(question)
     if lecturer_name:
         if lecturer_name.lower() not in ctx_lower:
+            return True
+
+    # 2.5. Kiểm tra địa danh / tên riêng cụ thể (vd: "cơ sở Ngọc Trục", "ở Hòa Lạc") và năm học/mốc thời gian cụ thể
+    # Nếu hoàn toàn không xuất hiện trong tài liệu nội bộ -> bắt buộc tra Internet.
+    ctx_plain = _strip_accents_lower(context_str or "")
+    for phrase in _extract_specific_entity_phrases(question):
+        if _strip_accents_lower(phrase) not in ctx_plain:
+            print(f"[*] Entity Check: '{phrase}' không có trong tài liệu nội bộ -> chuyển sang Web Search.")
+            return True
+
+    for yr in re.findall(r"\b(20[2-3]\d)\b", question):
+        if yr not in ctx_lower:
+            print(f"[*] Year Check: năm '{yr}' không có trong tài liệu nội bộ -> chuyển sang Web Search.")
+            return True
+
+    # 3. Kiểm tra câu hỏi về Tuyển sinh / Chỉ tiêu / Điểm chuẩn / Xét tuyển:
+    is_asking_admission = any(k in q_lower for k in [
+        "tuyển sinh", "chỉ tiêu", "điểm chuẩn", "xét tuyển", "phương thức tuyển", "nguyện vọng"
+    ])
+    is_explicit_postgrad = any(k in q_lower for k in [
+        "thạc sĩ", "thạc sỹ", "sau đại học", "cao học", "tiến sĩ", "tiến sỹ", "ncs", "nghiên cứu sinh"
+    ])
+    if is_asking_admission and not is_explicit_postgrad:
+        # Nếu trong ngữ cảnh tài liệu nội bộ KHÔNG có tài liệu đề án tuyển sinh đại học chính quy
+        has_undergrad_admission_doc = any(k in ctx_lower for k in [
+            "tuyển sinh đại học chính quy", "tuyển sinh đại học hệ chính quy", "đề án tuyển sinh đại học", "tuyển sinh vào đại học hệ chính quy"
+        ])
+        if not has_undergrad_admission_doc:
             return True
 
     return False
@@ -1590,6 +1700,8 @@ PARTIAL_MISSING_INFO_PATTERNS = [
     re.compile(r"chỉ\s+ghi\s+nhận.*?(?:mà|nhưng|tuy\s+nhiên)\s+(?:chưa|không)", re.IGNORECASE),
     re.compile(r"(?:chưa|không)\s+(?:thể\s+cung\s+cấp|liệt\s+kê|ghi\s+nhận|cung\s+cấp|đề\s+cập|nêu|có)(?:\s+cho\s+bạn)?(?:\s+chi\s+tiết|\s+cụ\s+thể)*\s*(?:về\s+môn|tên\s+từng\s+môn|môn\s+học|thông\s+tin\s+cá\s+nhân|thông\s+tin\s+chi\s+tiết|danh\s+sách)", re.IGNORECASE),
     re.compile(r"(?:tài\s+liệu|dữ\s+liệu).*?(?:chưa|không)\s+(?:liệt\s+kê|ghi\s+nhận|nêu\s+rõ|đề\s+cập).*?(?:môn\s+học|chi\s+tiết|cụ\s+thể)", re.IGNORECASE),
+    re.compile(r"(?:chưa\s+có|không\s+có|chưa\s+ghi\s+nhận|chưa\s+cung\s+cấp).*?(?:thông\s+tin|chỉ\s+tiêu|đề\s+án).*?(?:tuyển\s+sinh\s+đại\s+học|đại\s+học\s+chính\s+quy)", re.IGNORECASE),
+    re.compile(r"(?:chỉ\s+có|chỉ\s+ghi\s+nhận|chỉ\s+áp\s+dụng\s+cho).*?(?:tuyển\s+sinh\s+thạc\s+sĩ|sau\s+đại\s+học)", re.IGNORECASE),
 ]
 
 
@@ -1614,6 +1726,12 @@ def _has_missing_info_admission(text: str, question: str = "") -> bool:
             has_course_info = any(k in body_lower for k in ["tín chỉ", "học kỳ", "hk", "mã môn", "tiên quyết", "chuyên ngành"])
             if has_course_info and len(body) > 150:
                 return False
+
+    # Nếu 2 đoạn mở đầu thừa nhận tài liệu nội bộ chưa có/chưa đề cập thông tin được hỏi
+    # (kể cả khi LLM liệt kê thêm thông tin liên quan hoặc hướng dẫn liên hệ bên dưới) -> kích hoạt Web Search
+    head_paras = "\n\n".join(p.strip() for p in body.split("\n\n")[:2] if p.strip()).lower()
+    if any(p in head_paras for p in REFUSAL_PHRASES) or any(rx.search(head_paras) for rx in REFUSAL_REGEX_PATTERNS):
+        return True
 
     for rx in PARTIAL_MISSING_INFO_PATTERNS:
         if rx.search(body):
@@ -2073,11 +2191,15 @@ def text_to_speech():
     data = request.get_json() or {}
     text = (data.get("text") or "").strip()
     voice = (data.get("voice") or "vi-VN-HoaiMyNeural").strip()
+    try:
+        speed = float(data.get("speed") or 1.0)
+    except (ValueError, TypeError):
+        speed = 1.0
 
     if not text:
         return jsonify({"error": "Vui lòng cung cấp văn bản cần đọc."}), 400
 
-    result = voice_service.generate_speech(text=text, voice=voice)
+    result = voice_service.generate_speech(text=text, voice=voice, speed=speed)
     if "error" in result:
         return jsonify(result), 500
     return jsonify(result)

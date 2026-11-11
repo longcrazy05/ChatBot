@@ -308,12 +308,24 @@ def extract_queried_domains(q: str) -> list:
 def refine_search_query(q: str) -> str:
     """
     Chuẩn hóa và trích xuất thực thể tìm kiếm cốt lõi từ câu hỏi của người dùng.
-    Loại bỏ các từ đệm hội thoại (dạy môn gì, thông tin cá nhân, ntn, cho em hỏi...)
-    để Search API tìm kiếm chính xác thực thể trọng tâm thay vì bị nhiễu từ khóa.
+    Loại bỏ các từ đệm hội thoại (dạy môn gì, thông tin cá nhân, ntn, cho em hỏi...),
+    loại bỏ các lời than phiền hoặc yêu cầu tra internet, đồng thời định hướng truy vấn
+    chính xác đến cổng thông tin phù hợp của PTIT (giáo vụ, tuyển sinh, đào tạo).
     """
     if not q:
         return ""
     s = q.strip()
+
+    # 0. Loại bỏ các mẫu câu hội thoại mang tính than phiền, chỉ dẫn hoặc yêu cầu tra internet
+    meta_patterns = [
+        r"\btôi\s+hỏi\s+",
+        r"\bnhưng\s+(?:kết\s+quả\s+)?(?:lại\s+)?(?:ra|là|thành)\s+[^,.;]*",
+        r"\bở\s+đây\s+tôi\s+cần\s+tra\s+(?:cứu\s+)?(?:trên\s+|qua\s+)?(?:internet|mạng|google|web)\b",
+        r"\bkiểm\s+tra\s+lại\s+(?:việc\s+)?tra\s+tài\s+liệu\s+và\s+tra\s+internet\b",
+        r"\b(?:hãy\s+)?(?:tra\s+(?:cứu\s+)?(?:trên\s+|qua\s+)?(?:internet|mạng|google|web)|tìm\s+(?:kiếm\s+)?(?:trên\s+|qua\s+)?(?:internet|mạng|google|web)|search\s+web)\b",
+    ]
+    for pat in meta_patterns:
+        s = re.sub(pat, " ", s, flags=re.IGNORECASE)
 
     # 1. Phát hiện câu hỏi về giảng viên / thầy / cô / cán bộ
     lecturer_name = extract_queried_lecturer_name(s)
@@ -344,10 +356,39 @@ def refine_search_query(q: str) -> str:
             if k in s.lower():
                 core_terms.append(k)
         term_str = " ".join(core_terms) if core_terms else s
-        # Bổ sung từ khóa định hướng chính xác đến phòng Giáo vụ / Công tác sinh viên
         return f"{term_str} thủ tục sinh viên giáo vụ ptit"
 
-    # 4. Xóa các cụm từ đệm hội thoại
+    # 4. Phát hiện câu hỏi tuyển sinh / chỉ tiêu / điểm chuẩn / xét tuyển
+    tuyensinh_keywords = [
+        "tuyển sinh", "tuyen sinh", "chỉ tiêu", "chi tieu", "điểm chuẩn", "diem chuan",
+        "xét tuyển", "xet tuyen", "phương thức tuyển", "phuong thuc tuyen", "đề án tuyển sinh"
+    ]
+    if any(k in s.lower() for k in tuyensinh_keywords):
+        is_postgrad = any(k in s.lower() for k in ["thạc sĩ", "thạc sỹ", "sau đại học", "cao học", "tiến sĩ", "tiến sỹ"])
+        target_major = ""
+        major_patterns = [
+            (r"\b(?:ngành\s+)?(?:cntt|công\s+nghệ\s+thông\s+tin)\b", "Công nghệ thông tin"),
+            (r"\b(?:ngành\s+)?(?:attt|an\s+toàn\s+thông\s+tin)\b", "An toàn thông tin"),
+            (r"\b(?:ngành\s+)?(?:khoa\s+học\s+máy\s+tính)\b", "Khoa học máy tính"),
+            (r"\b(?:ngành\s+)?(?:trí\s+tuệ\s+nhân\s+tạo|ai)\b", "Trí tuệ nhân tạo"),
+            (r"\b(?:ngành\s+)?(?:kỹ\s+thuật\s+điện\s+tử\s+viễn\s+thông|đtvt|điện\s+tử\s+viễn\s+thông)\b", "Điện tử viễn thông"),
+            (r"\b(?:ngành\s+)?(?:marketing)\b", "Marketing"),
+            (r"\b(?:ngành\s+)?(?:truyền\s+thông\s+đa\s+phương\s+tiện)\b", "Truyền thông đa phương tiện"),
+            (r"\b(?:ngành\s+)?(?:thương\s+mại\s+điện\s+tử)\b", "Thương mại điện tử"),
+        ]
+        for pat, major_name in major_patterns:
+            if re.search(pat, s, re.IGNORECASE):
+                target_major = major_name
+                break
+
+        if is_postgrad:
+            major_suffix = f"ngành {target_major}" if target_major else ""
+            return f"chỉ tiêu tuyển sinh thạc sĩ {major_suffix} ptit".strip()
+        else:
+            major_suffix = f"ngành {target_major}" if target_major else ""
+            return f"chỉ tiêu tuyển sinh đại học chính quy {major_suffix} ptit tuyensinh".strip()
+
+    # 5. Xóa các cụm từ đệm hội thoại
     fillers = [
         r"\b(?:cho\s+(?:em|mình|tôi)\s+hỏi|hỏi\s+chút|bạn\s+ơi|ad\s+ơi|bot\s+ơi)\b",
         r"\b(?:thông\s+tin\s+cá\s+nhân|thông\s+tin\s+liên\s+hệ|tiểu\s+sử|profile)\b",
@@ -473,6 +514,17 @@ def _filter_relevant_results(results: list, original_query: str, num_results: in
                 score += 15
             if any(kw in comb for kw in ["giáo vụ", "mẫu biểu", "thủ tục hành chính", "kết quả học tập", "xác nhận"]):
                 score += 8
+
+        # Nếu là câu hỏi tuyển sinh: Ưu tiên trang tuyensinh.ptit.edu.vn và các đề án tuyển sinh mới nhất (2025, 2026)
+        if is_tuyensinh_query:
+            if "tuyensinh.ptit.edu.vn" in u_lower or "/tuyen-sinh" in u_lower or "thong-tin-tuyen-sinh" in u_lower or "de-an-tuyen-sinh" in u_lower:
+                score += 15
+            if "2026" in u_lower or "2026" in comb:
+                score += 10
+            elif "2025" in u_lower or "2025" in comb:
+                score += 6
+            if any(y in u_lower or y in comb for y in ["2018", "2019", "2020", "2021"]):
+                score -= 10
 
         # Khớp từ khóa cốt lõi
         hits = sum(1 for w in core_words if w in comb)
